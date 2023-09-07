@@ -64,7 +64,6 @@ struct wland_linux_monitor {
 	void *pub;
 	enum monitor_states monitor_state;
 	struct monitor_interface mon_if[WLAND_MAX_IFS];
-	struct mutex lock;	/* lock to protect mon_if */
 };
 
 static struct wland_linux_monitor g_monitor;
@@ -266,7 +265,6 @@ int wland_add_monitor(char *name, struct net_device **new_ndev)
 
 	WLAND_DBG(DEFAULT, TRACE, "Enter, if name: %s\n", name);
 
-	mutex_lock(&g_monitor.lock);
 	if (!name || !new_ndev) {
 		WLAND_ERR("invalid parameters\n");
 		ret = -EINVAL;
@@ -325,7 +323,6 @@ out:
 	if (ret && ndev)
 		free_netdev(ndev);
 
-	mutex_unlock(&g_monitor.lock);
 
 	return ret;
 }
@@ -337,7 +334,6 @@ int wland_del_monitor(struct net_device *ndev)
 	if (!ndev)
 		return -EINVAL;
 
-	mutex_lock(&g_monitor.lock);
 	for (i = 0; i < WLAND_MAX_IFS; i++) {
 		if (g_monitor.mon_if[i].mon_ndev == ndev ||
 			g_monitor.mon_if[i].real_ndev == ndev) {
@@ -355,7 +351,6 @@ int wland_del_monitor(struct net_device *ndev)
 		WLAND_ERR
 			("interface not found in monitor IF array, is this a monitor IF? 0x%p\n",
 			ndev);
-	mutex_unlock(&g_monitor.lock);
 
 	return 0;
 }
@@ -367,7 +362,6 @@ int wland_monitor_init(void *pub)
 
 	if (g_monitor.monitor_state == MONITOR_STATE_DEINIT) {
 		g_monitor.pub = pub;
-		mutex_init(&g_monitor.lock);
 		g_monitor.monitor_state = MONITOR_STATE_INIT;
 	}
 	return 0;
@@ -380,7 +374,6 @@ int wland_monitor_deinit(void)
 
 	WLAND_DBG(DEFAULT, TRACE, "Enter\n");
 
-	mutex_lock(&g_monitor.lock);
 	if (g_monitor.monitor_state != MONITOR_STATE_DEINIT) {
 		for (i = 0; i < WLAND_MAX_IFS; i++) {
 			ndev = g_monitor.mon_if[i].mon_ndev;
@@ -393,7 +386,6 @@ int wland_monitor_deinit(void)
 		}
 		g_monitor.monitor_state = MONITOR_STATE_DEINIT;
 	}
-	mutex_unlock(&g_monitor.lock);
 	return 0;
 }
 

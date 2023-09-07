@@ -22,8 +22,8 @@
 #include <linux/init.h>
 #include <asm/io.h>
 
-#include <plat/cpu.h>
-#include <plat/reg_cfg_regs.h>
+#include <rda/plat/cpu.h>
+#include <rda/plat/reg_cfg_regs.h>
 
 struct rda_socinfo {
 	unsigned short prod_id;

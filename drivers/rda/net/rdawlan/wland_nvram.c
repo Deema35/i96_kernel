@@ -23,7 +23,7 @@
 #include <wland_dbg.h>
 
 #ifdef USE_MAC_FROM_RDA_NVRAM
-#include <plat/md_sys.h>
+#include <rda/plat/md_sys.h>
 #endif
 
 #define WIFI_NVRAM_FILE_NAME    "/data/misc/wifi/WLANMAC"
@@ -33,9 +33,7 @@ static int nvram_read(char *filename, char *buf, ssize_t len, int offset)
 	struct file *fd;
 	int retLen = -1;
 
-	mm_segment_t old_fs = get_fs();
 
-	set_fs(KERNEL_DS);
 	fd = osl_open_image(filename, O_WRONLY | O_CREAT, 0644);
 
 	if (IS_ERR(fd)) {
@@ -63,7 +61,7 @@ static int nvram_read(char *filename, char *buf, ssize_t len, int offset)
 	} while (false);
 
 	osl_close_image(fd);
-	set_fs(old_fs);
+	
 
 	return retLen;
 }
@@ -73,9 +71,7 @@ static int nvram_write(char *filename, char *buf, ssize_t len, int offset)
 	struct file *fd;
 	int retLen = -1;
 
-	mm_segment_t old_fs = get_fs();
 
-	set_fs(KERNEL_DS);
 	fd = osl_open_image(filename, O_WRONLY | O_CREAT, 0644);
 
 	if (IS_ERR(fd)) {
@@ -105,7 +101,6 @@ static int nvram_write(char *filename, char *buf, ssize_t len, int offset)
 	} while (false);
 
 	osl_close_image(fd);
-	set_fs(old_fs);
 
 	return retLen;
 }

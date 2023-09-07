@@ -43,7 +43,7 @@
 #include <wland_android.h>
 
 #define CHAN2G(_channel, _freq, _flags) {	    \
-	.band			  = IEEE80211_BAND_2GHZ,    \
+	.band			  = NL80211_BAND_2GHZ,    \
 	.center_freq	  = (_freq),			    \
 	.hw_value		  = (_channel),			    \
 	.flags			  = (_flags),			    \
@@ -132,7 +132,7 @@ static struct ieee80211_channel __wl_5ghz_a_channels[] = {
 #endif /* WLAND_5GRF_SUPPORT */
 
 static struct ieee80211_supported_band __wl_band_2ghz = {
-	.band = IEEE80211_BAND_2GHZ,
+	.band = NL80211_BAND_2GHZ,
 	.channels = __wl_2ghz_channels,
 	.n_channels = ARRAY_SIZE(__wl_2ghz_channels),
 	.bitrates = wl_g_rates,
@@ -457,13 +457,11 @@ static bool check_vif_up(struct wland_cfg80211_vif *vif)
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-static struct wireless_dev *cfg80211_add_virtual_iface(struct wiphy *wiphy,
-	const char *name,
-	enum nl80211_iftype type, u32 * flags, struct vif_params *params)
+static struct wireless_dev *cfg80211_add_virtual_iface(struct wiphy *wiphy, const char *name, unsigned char name_assign_type, enum nl80211_iftype type, struct vif_params *params)
 {
 	struct wireless_dev *ndev = NULL;
 
-	WLAND_DBG(CFG80211, TRACE, "enter: %s, type %d\n", name, type);
+	WLAND_ERR( "cfg80211_add_virtual_iface: %s, type %d\n", name, type);
 
 	if (!name) {
 		WLAND_ERR("name is NULL\n");
@@ -499,8 +497,8 @@ static struct wireless_dev *cfg80211_add_virtual_iface(struct wiphy *wiphy,
 
 #else
 struct net_device *cfg80211_add_virtual_iface(struct wiphy *wiphy,
-	char *name,
-	enum nl80211_iftype type, u32 * flags, struct vif_params *params)
+	char *name,  unsigned char name_assign_type,
+	enum nl80211_iftype type, struct vif_params *params)
 {
 
 	struct net_device *ndev = NULL;
@@ -550,6 +548,7 @@ s32 wland_notify_escan_complete(struct wland_cfg80211_info * cfg,
 {
 	struct cfg80211_scan_request *scan_request;
 	struct wland_ssid_le ssid_le;
+	struct cfg80211_scan_info info;
 	s32 err = 0;
 
 	memset(&ssid_le, 0, sizeof(ssid_le));
@@ -589,11 +588,16 @@ s32 wland_notify_escan_complete(struct wland_cfg80211_info * cfg,
 		WLAND_DBG(CFG80211, DEBUG, "scheduled scan completed\n");
 		cfg->sched_escan = false;
 		if (!aborted)
-			cfg80211_sched_scan_results(cfg_to_wiphy(cfg));
+			cfg80211_sched_scan_results(cfg_to_wiphy(cfg), 0);
 	} else if (scan_request) {
 		WLAND_DBG(CFG80211, DEBUG, "ESCAN Completed scan: %s\n",
 			aborted ? "Aborted" : "Done");
-		cfg80211_scan_done(scan_request, aborted);
+			
+		 
+		info.aborted = aborted;
+		
+			
+		cfg80211_scan_done(scan_request, &info);
 	}
 
 	WLAND_DBG(CFG80211, TRACE, "Done(aborted:%d,fw_abort:%d)\n", aborted,
@@ -660,7 +664,7 @@ static s32 cfg80211_del_virtual_iface(struct wiphy *wiphy,
 
 static s32 cfg80211_change_virtual_iface(struct wiphy *wiphy,
 	struct net_device *ndev,
-	enum nl80211_iftype type, u32 * flags, struct vif_params *params)
+	enum nl80211_iftype type, struct vif_params *params)
 {
 #ifdef WLAND_P2P_SUPPORT
 	struct wland_cfg80211_info *cfg = wiphy_priv(wiphy);
@@ -747,14 +751,12 @@ done:
 	return err;
 }
 
-static s32 wland_run_escan(struct wland_cfg80211_info *cfg,
-	struct wland_if *ifp, struct cfg80211_scan_request *request, u16 action)
+static s32 wland_run_escan(struct wland_cfg80211_info *cfg, struct wland_if *ifp, struct cfg80211_scan_request *request, u16 action)
 {
 	struct wland_ssid_le ssid_le;
 	s32 err = 0;
 
-	WLAND_DBG(CFG80211, DEBUG, "E-SCAN START(request->n_ssids:%d), Enter\n",
-		request->n_ssids);
+	WLAND_DBG(CFG80211, DEBUG, "E-SCAN START(request->n_ssids:%d), Enter\n", request->n_ssids);
 
 	memset(&ssid_le, 0, sizeof(ssid_le));
 
@@ -798,33 +800,23 @@ static s32 wland_do_escan(struct wland_cfg80211_info *cfg, struct wiphy *wiphy,
 	return escan->run(cfg, ifp, request, SCAN_ACTION_START);
 }
 
-static s32 cfg80211_scan(struct wiphy *wiphy,
-#if    LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-	struct net_device *ndev,
-#endif				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct cfg80211_scan_request *request)
+static s32 cfg80211_scan(struct wiphy *wiphy, struct cfg80211_scan_request *request)
 {
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 
-#if    LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-	struct wland_cfg80211_vif *vif =
-		container_of(request->wdev, struct wland_cfg80211_vif, wdev);
-#else /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct wland_cfg80211_vif *vif =
-		((struct wland_if *) netdev_priv(ndev))->vif;
-#endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
+	struct wland_cfg80211_vif *vif = container_of(request->wdev, struct wland_cfg80211_vif, wdev);
+
 	struct wland_if *ifp = vif->ifp;
 	struct cfg80211_ssid *ssids = NULL;
 	struct wland_cfg80211_scan_req *sr = &cfg->scan_req_int;
 	s32 err = 0, SSID_len;
 	bool escan_req;
-
+	printk(KERN_ERR "cfg80211_scan_02 vif = %08x cfg = %08x\n", (unsigned int)vif, (unsigned int)cfg);
 	if (!check_vif_up(vif))
 		return -EIO;
 
 	while (test_bit(SCAN_STATUS_BUSY, &cfg->scan_status)) {
-		WLAND_DBG(CFG80211, DEBUG,
-			"Scanning already: status (%lu)\n", cfg->scan_status);
+		printk(KERN_ERR "Scanning already: status (%lu)\n", cfg->scan_status);
 		msleep(100);
 	}
 	if (test_bit(SCAN_STATUS_ABORT, &cfg->scan_status)) {
@@ -866,25 +858,26 @@ static s32 cfg80211_scan(struct wiphy *wiphy,
 		 */
 	}
 
-	WLAND_DBG(CFG80211, DEBUG,
-		"START scan bss:%d,ssids->ssid_len:%d,request->n_ssids:%d, ssids->ssid=%s\n",
-		escan_req, ssids->ssid_len, request->n_ssids, ssids->ssid);
+	printk(KERN_ERR  "START scan bss:%d,ssids->ssid_len:%d,request->n_ssids:%d, ssids->ssid=%s\n", escan_req, ssids->ssid_len, request->n_ssids, ssids->ssid);
 #ifdef WLAND_INIT_SCAN_SUPPORT
-	if (atomic_read(&cfg->init_scan) == 0) {
+	if (atomic_read(&cfg->init_scan) == 0)
+	{
 		// init scan
 		atomic_set(&cfg->init_scan, 1);
-	} else if (atomic_read(&cfg->init_scan) == 1) {
+	} else if
+	(atomic_read(&cfg->init_scan) == 1)
+	{
 		// first scan from wpa_supplicant
 		atomic_set(&cfg->init_scan, 2);
-		WLAND_DBG(CFG80211, DEBUG, "first time scan report\n");
+		printk(KERN_ERR "first time scan report\n");
 		cfg->scan_request = request;
 		schedule_work(&cfg->scan_report_work);
 #ifdef WLAND_P2P_SUPPORT
-		if (wland_p2p_scan_finding_common_channel(cfg, NULL))
-			return 0;
+		if (wland_p2p_scan_finding_common_channel(cfg, NULL)) return 0;
 #endif /* WLAND_P2P_SUPPORT */
 		return 0;
-	} else {
+	} else
+	{
 		cfg->scan_request = request;
 	}
 #else
@@ -892,7 +885,8 @@ static s32 cfg80211_scan(struct wiphy *wiphy,
 #endif
 	set_bit(SCAN_STATUS_BUSY, &cfg->scan_status);
 
-	if (escan_req) {
+	if (escan_req)
+	{
 		cfg->scan_info.run = wland_run_escan;
 #ifdef WLAND_P2P_SUPPORT
 		err = wland_p2p_scan_prep(wiphy, request, vif);
@@ -904,9 +898,10 @@ static s32 cfg80211_scan(struct wiphy *wiphy,
 			return err;
 		}
 #endif /* WLAND_P2P_SUPPORT */
-	} else {
-		WLAND_DBG(CFG80211, TRACE, "ssid \"%s\", ssid_len (%d)\n",
-			ssids->ssid, ssids->ssid_len);
+	} 
+	else
+	{
+		printk(KERN_ERR  "ssid \"%s\", ssid_len (%d)\n", ssids->ssid, ssids->ssid_len);
 
 		memset(&sr->ssid_le, 0, sizeof(sr->ssid_le));
 		SSID_len = min_t(u8, sizeof(sr->ssid_le.SSID), ssids->ssid_len);
@@ -915,8 +910,10 @@ static s32 cfg80211_scan(struct wiphy *wiphy,
 		if (SSID_len) {
 			memcpy(sr->ssid_le.SSID, ssids->ssid, SSID_len);
 			sr->ssid_le.SSID_len = cpu_to_le32(SSID_len);
-		} else {
-			WLAND_DBG(CFG80211, TRACE, "Broadcast scan\n");
+		} 
+		else
+		{
+			printk(KERN_ERR  "Broadcast scan\n");
 		}
 	}
 
@@ -925,13 +922,12 @@ static s32 cfg80211_scan(struct wiphy *wiphy,
 //		err = 0;
 		//goto scan_out;
 		clear_bit(SCAN_STATUS_BUSY, &cfg->scan_status);
-		if (timer_pending(&cfg->scan_timeout))
-			del_timer_sync(&cfg->scan_timeout);
+		if (timer_pending(&cfg->scan_timeout)) del_timer_sync(&cfg->scan_timeout);
 		cfg->scan_request = NULL;
 		return err;
 	}
 
-	WLAND_DBG(CFG80211, TRACE, "Done(err:%d)\n", err);
+	printk(KERN_ERR  "Done(err:%d)\n", err);
 
 	return 0;
 }
@@ -943,11 +939,11 @@ static s32 cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
 	struct wland_if *ifp = netdev_priv(ndev);
 	s32 err = 0;
 
-	WLAND_DBG(CFG80211, TRACE, "Enter\n");
+	printk(KERN_ERR  "set_wiphy_params_01\n");
 
 	if (!check_vif_up(ifp->vif))
 		return -EIO;
-
+	printk(KERN_ERR  "set_wiphy_params_02\n");
 	if (changed & WIPHY_PARAM_RTS_THRESHOLD
 		&& (cfg->conf->rts_threshold != wiphy->rts_threshold)) {
 		cfg->conf->rts_threshold = wiphy->rts_threshold;
@@ -986,7 +982,7 @@ static s32 cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
 		if (err < 0)
 			goto done;
 	}
-
+	printk(KERN_ERR  "set_wiphy_params_03\n");
 done:
 	WLAND_DBG(CFG80211, TRACE, "Done\n");
 	return err;
@@ -1010,8 +1006,7 @@ static void wland_link_down(struct wland_cfg80211_vif *vif)
 		err = wland_disconnect_bss(vif->ifp, &scbval);
 		if (!err) {
 			WLAND_ERR("DISASSOC from AP success!\n");
-			cfg80211_disconnected(vif->wdev.netdev, 0, NULL, 0,
-				GFP_KERNEL);
+			cfg80211_disconnected(vif->wdev.netdev, 0, NULL, 0, false, GFP_KERNEL);
 		}
 
 		clear_bit(VIF_STATUS_CONNECTED, &vif->sme_state);
@@ -1026,8 +1021,7 @@ static void wland_link_down(struct wland_cfg80211_vif *vif)
 	WLAND_DBG(CFG80211, TRACE, "Done\n");
 }
 
-static s32 cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *ndev,
-	struct cfg80211_ibss_params *params)
+static s32 cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *ndev, struct cfg80211_ibss_params *params)
 {
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct wland_if *ifp = netdev_priv(ndev);
@@ -1041,46 +1035,47 @@ static s32 cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *ndev,
 	if (!check_vif_up(ifp->vif))
 		return -EIO;
 
-	if (params->ssid) {
-		WLAND_DBG(CFG80211, TRACE, "SSID: %s\n", params->ssid);
-	} else {
-		WLAND_DBG(CFG80211, TRACE, "SSID: NULL, Not supported\n");
+	if (params->ssid)
+	{
+		printk(KERN_ERR "SSID: %s\n", params->ssid);
+	} 
+	else 
+	{
+		printk(KERN_ERR "SSID: NULL, Not supported\n");
 		return -EOPNOTSUPP;
 	}
 
 	set_bit(VIF_STATUS_CONNECTING, &ifp->vif->sme_state);
 
 	if (params->bssid)
-		WLAND_DBG(CFG80211, TRACE, "BSSID: %pM\n", params->bssid);
+		printk(KERN_ERR "BSSID: %pM\n", params->bssid);
 	else
-		WLAND_DBG(CFG80211, TRACE, "No BSSID specified\n");
+		printk(KERN_ERR "No BSSID specified\n");
 
-#if     LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 	if (params->chandef.chan)
-		WLAND_DBG(CFG80211, TRACE, "channel: %d\n",
+		printk(KERN_ERR "channel: %d\n",
 			params->chandef.chan->center_freq);
 	else
-		WLAND_DBG(CFG80211, TRACE, "no channel specified\n");
-#endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
+		printk(KERN_ERR "no channel specified\n");
 
 	if (params->channel_fixed)
-		WLAND_DBG(CFG80211, TRACE, "fixed channel required\n");
+		printk(KERN_ERR "fixed channel required\n");
 	else
-		WLAND_DBG(CFG80211, TRACE, "no fixed channel required\n");
+		printk(KERN_ERR "no fixed channel required\n");
 
 	if (params->ie && params->ie_len)
-		WLAND_DBG(CFG80211, TRACE, "ie len: %d\n", params->ie_len);
+		printk(KERN_ERR "ie len: %d\n", params->ie_len);
 	else
-		WLAND_DBG(CFG80211, TRACE, "no ie specified\n");
+		printk(KERN_ERR "no ie specified\n");
 
 	if (params->beacon_interval)
-		WLAND_DBG(CFG80211, TRACE, "beacon interval: %d\n",
+		printk(KERN_ERR "beacon interval: %d\n",
 			params->beacon_interval);
 	else
-		WLAND_DBG(CFG80211, TRACE, "no beacon interval specified\n");
+		printk(KERN_ERR "no beacon interval specified\n");
 
 	if (params->basic_rates)
-		WLAND_DBG(CFG80211, TRACE, "basic rates: %08X\n",
+		printk(KERN_ERR "basic rates: %08X\n",
 			params->basic_rates);
 	else
 		WLAND_DBG(CFG80211, TRACE, "no basic rates specified\n");
@@ -1217,62 +1212,85 @@ static s32 cfg80211_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 	return 0;
 }
 
-static s32 wland_wakeup_connect_worker(struct wland_cfg80211_connect_info
-	*conn_info);
-static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
-	struct cfg80211_connect_params *sme)
+static s32 wland_wakeup_connect_worker(struct wland_cfg80211_connect_info *conn_info);
+
+static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cfg80211_connect_params *sme)
 {
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
 	struct wland_cfg80211_connect_info *conn_info = &cfg->conn_info;
-	struct ieee80211_channel *chan = sme->channel;
+	struct ieee80211_channel *chan = NULL;
+	struct wland_bss_info_le *bss_list = NULL;
+	struct wland_bss_info_le *bss_current = NULL;
+	
+	
 	u16 chanspec;
 	s32 err = 0;
-	u8 *pcgroup_encrypt_val = NULL, *pccipher_group = NULL, *pcwpa_version =
-		NULL;
+	u8 *pcgroup_encrypt_val = NULL, *pccipher_group = NULL, *pcwpa_version = NULL;
 
-	WLAND_DBG(CFG80211, TRACE, "Enter\n");
-	if (!check_vif_up(ifp->vif))
-		return -EIO;
-
+	if (!check_vif_up(ifp->vif)) return -EIO;
+	
+	
+	memset(profile, '\0', sizeof(struct wland_cfg80211_profile));
+	
 	if (!sme->ssid) {
 		WLAND_ERR("Invalid ssid\n");
 		return -EOPNOTSUPP;
 	}
-
+	else
+	{
+		profile->ssid.SSID_len = min_t(u32, (u32) sizeof(profile->ssid.SSID), (u32)sme->ssid_len);
+		memcpy(&profile->ssid.SSID, sme->ssid, profile->ssid.SSID_len);
+		list_for_each_entry(bss_list, &cfg->scan_result_list, list)
+		{
+			
+			if (!strcmp(bss_list->SSID, profile->ssid.SSID))
+			{
+				bss_current = bss_list;
+				break;
+			}
+			
+		}
+	}
 	while (test_bit(SCAN_STATUS_BUSY, &cfg->scan_status)) {
-		WLAND_DBG(CFG80211, DEBUG,
-			"Scanning : status (%lu)\n", cfg->scan_status);
+		printk(KERN_ERR  "Scanning : status (%lu)\n", cfg->scan_status);
 		msleep(200);
 	}
-
+	
 	if (cfg->in_disconnecting) {
 		cfg->in_waiting = true;
 		wait_for_completion_timeout(&cfg->disconnecting_wait,
 			msecs_to_jiffies(2 * 1000));
 	}
 	cfg->in_waiting = false;
-
-	memset(profile, '\0', sizeof(struct wland_cfg80211_profile));
-	memcpy(profile->bssid, sme->bssid, ETH_ALEN);
+	
+	//memcpy(profile->bssid, sme->bssid, ETH_ALEN);
+	
+	
+	
+	if (sme->bssid) ether_addr_copy(profile->bssid, sme->bssid);
+		
+	else if (bss_current) ether_addr_copy(profile->bssid, bss_current->BSSID);
+		
+	else
+	{
+		WLAND_ERR("Invalid bssid\n");
+		return -EOPNOTSUPP; 
+	}
+	
 	profile->valid_bssid = true;
-
-	WLAND_DBG(CFG80211, TRACE,
-		"sme->ssid:%s, sme->bssid:%pM, sme->channel:%d\n", sme->ssid,
-		sme->bssid,
-		ieee80211_frequency_to_channel(sme->channel->center_freq));
-	WLAND_DBG(CFG80211, TRACE,
-		"sme->auth_type:%d, sme->ie_len:%d, sme->key_len:%d\n",
-		sme->auth_type, sme->ie_len, sme->key_len);
-	WLAND_DBG(CFG80211, TRACE, "############# begin connect......\n");
+	
+	printk(KERN_ERR  "sme->ssid:%s, profile->bssid:%pM,\n", sme->ssid, profile->bssid);
+	printk(KERN_ERR "sme->auth_type:%d, sme->ie_len:%d, sme->key_len:%d\n", sme->auth_type, sme->ie_len, sme->key_len);
+	printk(KERN_ERR "############# begin connect......\n");
 	set_bit(VIF_STATUS_CONNECTING, &ifp->vif->sme_state);
 
-	if (timer_pending(&conn_info->connect_restorework_timeout)) {
+	if (timer_pending(&conn_info->connect_restorework_timeout))
+	{ 
 		del_timer_sync(&conn_info->connect_restorework_timeout);
-		WLAND_DBG(CFG80211, TRACE, "###### delete connect restorework timer\n");
+		printk(KERN_ERR "###### delete connect restorework timer\n");
 	}
-
 #ifdef WLAND_P2P_SUPPORT
 	if (ifp->vif == cfg->p2p.bss_idx[P2PAPI_BSSCFG_PRIMARY].vif) {
 		struct wland_tlv *rsn_ie;
@@ -1308,25 +1326,37 @@ static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 		wland_fil_iovar_data_set(ifp, "wpaie", ie, ie_len);
 	}
 #endif /* WLAND_P2P_SUPPORT */
-
-	err = wland_fil_set_mgmt_ie(ifp, sme->ie, sme->ie_len);
-	if (err < 0) {
-		WLAND_ERR("Set Assoc REQ IE Failed\n");
+	if(sme->ie) err = wland_fil_set_mgmt_ie(ifp, (void*)sme->ie, sme->ie_len);
+	
+	else if (bss_current) err = wland_fil_set_mgmt_ie(ifp, (void*)bss_current->ie, bss_current->ie_length);
+	
+	if (err < 0)
+	{
+		printk(KERN_ERR "Set Assoc REQ IE Failed\n");
 		goto done;
 	}
-
-	if (chan) {
-		cfg->channel =
-			ieee80211_frequency_to_channel(chan->center_freq);
+	
+	chan = sme->channel;
+	
+		
+	if (chan)
+	{
+		cfg->channel = ieee80211_frequency_to_channel(chan->center_freq);
 		chanspec = channel_to_chanspec(&cfg->d11inf, chan);
-	} else {
-		cfg->channel = 0;
-		chanspec = 0;
+	} 
+	else if (bss_current)
+	{
+		cfg->channel = bss_current->ctl_ch;
+		chanspec = bss_current->chanspec;
 	}
-
-	WLAND_DBG(CFG80211, TRACE,
-		"channel:%d, center_req:%d, chanspec:0x%04x\n", cfg->channel,
-		chan->center_freq, chanspec);
+	else
+	{
+		WLAND_ERR("Invalid channel\n");
+		goto done; 
+	}
+	printk(KERN_ERR "channel:%d,  chanspec:0x%04x\n", cfg->channel,  chanspec);
+	
+	
 
 	/*
 	 * 1.set wpa version
@@ -1337,38 +1367,35 @@ static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 	 */
 	profile->sec.auth_type = sme->auth_type;
 
-	WLAND_DBG(CFG80211, TRACE,
-		"setting wpa_version to 0x%0x, auth_type to 0x%0x.\n",
-		profile->sec.wpa_versions, profile->sec.auth_type);
-
+	printk(KERN_ERR "setting wpa_version to 0x%0x, auth_type to 0x%0x.\n", profile->sec.wpa_versions, profile->sec.auth_type);
+	
 	/*
 	 * 3.set cipher
 	 */
 	profile->sec.cipher_pairwise = sme->crypto.ciphers_pairwise[0];
 	profile->sec.cipher_group = sme->crypto.cipher_group;
+	
+	
 
 	/*
 	 * In case of privacy, but no security and WPS then simulate setting AES. WPS-2.0 allows no security
 	 */
-	if (wland_find_wpsie(sme->ie, sme->ie_len) && sme->privacy)
-		WLAND_DBG(CFG80211, DEBUG, "privacy 0x%0x\n", sme->privacy);
-
-	WLAND_DBG(CFG80211, TRACE,
-		"setting cipher(cipher_pairwise:0x%0x, cipher_group:0x%x)\n",
-		profile->sec.cipher_pairwise, profile->sec.cipher_group);
+	if ((sme->ie) && (wland_find_wpsie((void*)sme->ie, sme->ie_len) && sme->privacy)) printk(KERN_ERR "privacy 0x%0x\n", sme->privacy);
+	else if ((bss_current) && (wland_find_wpsie((void*)bss_current->ie, bss_current->ie_length) && sme->privacy)) printk(KERN_ERR "privacy 0x%0x\n", sme->privacy);
+	
+	
+	printk(KERN_ERR "setting cipher(cipher_pairwise:0x%0x, cipher_group:0x%x)\n", profile->sec.cipher_pairwise, profile->sec.cipher_group);
 
 	/*
 	 * 4.set key_mgmt
 	 */
 	profile->sec.wpa_auth = sme->crypto.akm_suites[0];
-
-	WLAND_DBG(CFG80211, TRACE,
-		"setting key_mgm(n_akm_suites:0x%0x, wpa_auth:0x%x)\n",
-		sme->crypto.n_akm_suites, profile->sec.wpa_auth);
+ 
+	printk(KERN_ERR "setting key_mgm(n_akm_suites:0x%0x, wpa_auth:0x%x)\n", sme->crypto.n_akm_suites, profile->sec.wpa_auth);
 
 	profile->sec.security = NO_ENCRYPT;
 	profile->sec.firmware_autype = OPEN_SYSTEM;
-
+	
 	if ((sme->crypto.n_ciphers_pairwise)
 		&& (profile->sec.cipher_pairwise != NO_ENCRYPT)) {
 		/*
@@ -1475,8 +1502,7 @@ static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 			/*
 			 * Set the new key/index
 			 */
-			WLAND_DBG(CFG80211, DEBUG,
-				"key length (%d),key index (%d),algo (%d),key \"%s\"\n",
+			printk(KERN_ERR  "key length (%d),key index (%d),algo (%d),key \"%s\"\n",
 				profile->wepkeys[sme->key_idx].len,
 				profile->wepkeys[sme->key_idx].index,
 				profile->wepkeys[sme->key_idx].algo,
@@ -1499,7 +1525,7 @@ static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 			}
 		}
 	}
-
+	
 	switch (sme->auth_type) {
 	case NL80211_AUTHTYPE_OPEN_SYSTEM:
 		profile->sec.firmware_autype = OPEN_SYSTEM;
@@ -1508,53 +1534,37 @@ static s32 cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 		profile->sec.firmware_autype = SHARED_KEY;
 		break;
 	default:
-		WLAND_DBG(CFG80211, DEBUG, "Automatic Authentation type = %d\n",
-			sme->auth_type);
+		printk(KERN_ERR "Automatic Authentation type = %d\n", sme->auth_type);
 		break;
 	}
 
-	WLAND_DBG(CFG80211, TRACE,
-		"Group encryption value:%s, Cipher Group:%s, WPA version:%s\n",
-		pcgroup_encrypt_val, pccipher_group, pcwpa_version);
+	printk(KERN_ERR "Group encryption value:%s, Cipher Group:%s, WPA version:%s\n", pcgroup_encrypt_val, pccipher_group, pcwpa_version);
 
-	profile->ssid.SSID_len =
-		min_t(u32, (u32) sizeof(profile->ssid.SSID),
-		(u32) sme->ssid_len);
-
-	memcpy(&profile->ssid.SSID, sme->ssid, profile->ssid.SSID_len);
-
-	if (profile->ssid.SSID_len < IEEE80211_MAX_SSID_LEN)
-		profile->ssid.SSID[profile->ssid.SSID_len] = 0;
-
-	WLAND_DBG(CFG80211, TRACE,
-		"imode:0x%x, authtype:%d, bssid:%pM, SSID:\"%s\", len (%d)\n",
-		profile->sec.security, profile->sec.firmware_autype,
-		profile->bssid, profile->ssid.SSID, profile->ssid.SSID_len);
+	if (profile->ssid.SSID_len < IEEE80211_MAX_SSID_LEN) profile->ssid.SSID[profile->ssid.SSID_len] = 0;
+	
+	printk(KERN_ERR "imode:0x%x, authtype:%d, bssid:%pM, SSID:\"%s\", len (%d)\n", profile->sec.security, profile->sec.firmware_autype, profile->bssid, profile->ssid.SSID, profile->ssid.SSID_len);
 
 	wland_wakeup_connect_worker(conn_info);
 	mod_timer(&conn_info->timer, jiffies + msecs_to_jiffies(CONNECT_TIMER_INTERVAL_MS));
-	WLAND_DBG(CFG80211, TRACE, "###### Set connect timer!\n");
+	printk(KERN_ERR "###### Set connect timer!\n");
 	conn_info->timer_on = true;
 	conn_info->retry_times = 0;
-
 done:
-	if (err < 0) {
-		WLAND_ERR
-			("Connect error(%d) and clear VIF_STATUS_CONNECTING.\n",
-			err);
+	if (err < 0)
+	{
+		printk(KERN_ERR "Connect error(%d) and clear VIF_STATUS_CONNECTING.\n", err);
 		clear_bit(VIF_STATUS_CONNECTING, &ifp->vif->sme_state);
-		if (timer_pending(&conn_info->timer)) {
+		if (timer_pending(&conn_info->timer))
+		{
 			del_timer_sync(&conn_info->timer);
-			WLAND_DBG(CFG80211, TRACE,
-				"###### delete conn_info->timer\n");
+			printk(KERN_ERR "###### delete conn_info->timer\n");
 		}
 	}
-	WLAND_DBG(CFG80211, TRACE, "Done(err:%d)\n", err);
+	printk(KERN_ERR "Done(err:%d)\n", err);
 	return err;
 }
 
-static s32 cfg80211_disconnect(struct wiphy *wiphy, struct net_device *ndev,
-	u16 reason_code)
+static s32 cfg80211_disconnect(struct wiphy *wiphy, struct net_device *ndev, u16 reason_code)
 {
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 	struct wland_cfg80211_connect_info *conn_info = cfg_to_conn(cfg);
@@ -1842,6 +1852,7 @@ static s32 cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	s32 val, wsec;
 	u8 keybuf[8] = { 0 };
 #endif
+	printk(KERN_ERR "cfg80211_add_key\n");
 	WLAND_DBG(CFG80211, DEBUG, "key index (%d),Enter\n", key_idx);
 	WLAND_DBG(CFG80211, DEBUG,
 		"Add Key(%s):\n"
@@ -2130,8 +2141,8 @@ static s32 cfg80211_config_default_mgmt_key(struct wiphy *wiphy,
 	return -EOPNOTSUPP;
 }
 
-static s32 cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
-	u8 * mac, struct station_info *sinfo)
+static int cfg80211_get_station_op(struct wiphy *wiphy, struct net_device *ndev,
+	const u8 *mac, struct station_info *sinfo)
 {
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
@@ -2163,12 +2174,12 @@ static s32 cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 			goto done;
 		}
 
-		sinfo->filled = STATION_INFO_INACTIVE_TIME;
+		sinfo->filled = NL80211_STA_INFO_INACTIVE_TIME;
 
 		sinfo->inactive_time = le32_to_cpu(sta_info_le->idle) * 1000;
 
 		if (le32_to_cpu(sta_info_le->flags) & WLAND_STA_ASSOC) {
-			sinfo->filled |= STATION_INFO_CONNECTED_TIME;
+			sinfo->filled |= NL80211_STA_INFO_CONNECTED_TIME;
 			sinfo->connected_time = le32_to_cpu(sta_info_le->in);
 		}
 		WLAND_DBG(CFG80211, TRACE,
@@ -2199,7 +2210,7 @@ static s32 cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 			goto done;
 		} else {
 			rate = 108;
-			sinfo->filled |= STATION_INFO_TX_BITRATE;
+			sinfo->filled |= NL80211_STA_INFO_TX_BITRATE;
 			sinfo->txrate.legacy = rate * 5;
 			WLAND_DBG(CFG80211, TRACE, "Rate %d Mbps\n", rate / 2);
 		}
@@ -2221,7 +2232,7 @@ static s32 cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 				WLAND_ERR("Could not get rssi (%d)\n", err);
 				goto done;
 			} else {
-				sinfo->filled |= STATION_INFO_SIGNAL;
+				sinfo->filled |= NL80211_STA_INFO_SIGNAL;
 				sinfo->signal = scb_val.val;
 				WLAND_DBG(CFG80211, TRACE, "RSSI %d dBm\n",
 					sinfo->signal);
@@ -2281,8 +2292,7 @@ done:
 	return err;
 }
 
-static struct wland_bss_info_le *wland_alloc_bss(
-	struct wland_cfg80211_info *cfg, struct wland_bss_info_le *old)
+static struct wland_bss_info_le *wland_alloc_bss( struct wland_cfg80211_info *cfg, struct wland_bss_info_le *old)
 {
 	struct wland_bss_info_le *bss;
 
@@ -2322,7 +2332,7 @@ static s32 wland_inform_single_bss(struct wland_cfg80211_info *cfg,
 	struct ieee80211_channel *notify_channel;
 	struct cfg80211_bss *bss;
 	struct ieee80211_supported_band *band =
-		wiphy->bands[IEEE80211_BAND_2GHZ];
+		wiphy->bands[NL80211_BAND_2GHZ];
 	struct wland_chan ch;
 	s32 notify_signal;
 	u16 channel;
@@ -2344,7 +2354,7 @@ static s32 wland_inform_single_bss(struct wland_cfg80211_info *cfg,
 	channel = bi->ctl_ch;
 
 	if (channel <= CH_MAX_2G_CHANNEL)
-		band = wiphy->bands[IEEE80211_BAND_2GHZ];
+		band = wiphy->bands[NL80211_BAND_2GHZ];
 #ifdef WLAND_5GRF_SUPPORT
 	else
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
@@ -2366,6 +2376,7 @@ static s32 wland_inform_single_bss(struct wland_cfg80211_info *cfg,
 
 	bss = cfg80211_inform_bss(wiphy,
 		notify_channel,
+		CFG80211_BSS_FTYPE_UNKNOWN,
 		(const u8 *) bi->BSSID,
 		0,
 		bi->capability,
@@ -2396,7 +2407,6 @@ static s32 wland_inform_bss(struct wland_cfg80211_info *cfg)
 
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
-	mutex_lock(&cfg->scan_result_lock);
 
 #if defined(WLAND_BSSCACHE_SUPPORT)
 	wl_update_bss_cache(&g_bss_cache_ctrl, &cfg->scan_result_list);
@@ -2473,7 +2483,6 @@ static s32 wland_inform_bss(struct wland_cfg80211_info *cfg)
 			p2p_disconnected = 0;
 	}
 #endif
-	mutex_unlock(&cfg->scan_result_lock);
 
 	return err;
 }
@@ -2515,7 +2524,7 @@ static s32 wland_inform_ibss(struct wland_cfg80211_info *cfg,
 	ch.chspec = le16_to_cpu(bi->chanspec);
 	cfg->d11inf.decchspec(&ch);
 
-	band = wiphy->bands[IEEE80211_BAND_2GHZ];
+	band = wiphy->bands[NL80211_BAND_2GHZ];
 #ifdef WLAND_5GRF_SUPPORT
 	if (ch.band == CHAN_BAND_5G)
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
@@ -2533,6 +2542,7 @@ static s32 wland_inform_ibss(struct wland_cfg80211_info *cfg,
 
 	bss = cfg80211_inform_bss(wiphy,
 		notify_channel,
+		CFG80211_BSS_FTYPE_UNKNOWN,
 		bssid,
 		0,
 		bi->capability,
@@ -2594,10 +2604,12 @@ static void cfg80211_scan_report_worker(struct work_struct *work)
 	wland_notify_escan_complete(cfg, cfg->scan_info.ifp, false, true);
 }
 
-static void wland_scan_timeout(ulong data)
+static void wland_scan_timeout(struct timer_list *tList)
 {
-	struct wland_cfg80211_info *cfg = (struct wland_cfg80211_info *) data;
+	struct wland_cfg80211_info *cfg =  from_timer(cfg, tList, scan_timeout);
 	struct wland_event_msg event;
+	
+	printk(KERN_ERR "wland_scan_timeout 1\n");
 
 	memset(&event, '\0', sizeof(struct wland_event_msg));
 
@@ -2625,18 +2637,16 @@ static s32 wland_wakeup_connect_worker(struct wland_cfg80211_connect_info
 	return 0;
 }
 
-static void wland_connect_timer(unsigned long data)
+static void wland_connect_timer(struct timer_list *tList)
 {
-	struct wland_cfg80211_connect_info *conn_info =
-		(struct wland_cfg80211_connect_info *) data;
-	struct wland_cfg80211_info *cfg =
-		container_of(conn_info, struct wland_cfg80211_info, conn_info);
+	struct wland_cfg80211_connect_info *conn_info = from_timer(conn_info, tList, timer);
+	struct wland_cfg80211_info *cfg = container_of(conn_info, struct wland_cfg80211_info, conn_info);
 	struct net_device *ndev = cfg_to_ndev(cfg);
 	struct wland_if *ifp = netdev_priv(ndev);
 
-	WLAND_DBG(CFG80211, DEBUG, "Enter\n");
+	printk(KERN_ERR "wland_connect_timer 1\n");
 	if (test_bit(VIF_STATUS_CONNECTED, &ifp->vif->sme_state)) {
-		WLAND_DBG(CFG80211, ERROR, "VIF_STATUS_CONNECTED\n");
+		printk(KERN_ERR "VIF_STATUS_CONNECTED\n");
 		return ;
 	}
 
@@ -2645,37 +2655,30 @@ static void wland_connect_timer(unsigned long data)
 		conn_info->retry_times++;
 
 		if (conn_info->retry_times < CONNECT_RETRY_TIMES_MAX) {
-			WLAND_DBG(CFG80211, TRACE,
-				"conn_info->timer expired and mod another timer! retry_times=%d\n",
-				conn_info->retry_times);
+			printk(KERN_ERR "conn_info->timer expired and mod another timer! retry_times=%d\n", conn_info->retry_times);
 			wland_wakeup_connect_worker(conn_info);
-			mod_timer(&conn_info->timer,
-				jiffies + msecs_to_jiffies(CONNECT_TIMER_INTERVAL_MS));
+			mod_timer(&conn_info->timer, jiffies + msecs_to_jiffies(CONNECT_TIMER_INTERVAL_MS));
 			conn_info->timer_on = true;
 		} else {
-			WLAND_DBG(CFG80211, INFO,
-				"conn_info->timer expired reached max times %d!! leave connecting\n",
-				conn_info->retry_times);
+			printk(KERN_ERR "conn_info->timer expired reached max times %d!! leave connecting\n", conn_info->retry_times);
 			test_and_clear_bit(VIF_STATUS_CONNECTING, &ifp->vif->sme_state);
 		}
 	}
-	WLAND_DBG(CFG80211, TRACE, "Done.\n");
+	printk(KERN_ERR "wland_connect_timer Done.\n");
 }
 
 static void wland_cfg80211_connect_worker(struct work_struct *work)
 {
-	struct wland_cfg80211_connect_info *conn_info =
-		container_of(work, struct wland_cfg80211_connect_info, work);
+	struct wland_cfg80211_connect_info *conn_info = container_of(work, struct wland_cfg80211_connect_info, work);
 	//struct wland_cfg80211_info *cfg = (struct wland_cfg80211_info *)conn_info->data;
 	int err = -1;
 
 	struct wland_if *ifp = netdev_priv(conn_info->ndev);
 	struct wland_cfg80211_profile *profile = ndev_to_prof(conn_info->ndev);
 
-	WLAND_DBG(CFG80211, DEBUG, "Enter conn_ctrl->timer_on=%d\n",
-		conn_info->timer_on);
+	printk(KERN_ERR  "Enter conn_ctrl->timer_on=%d\n", conn_info->timer_on);
 
-	WLAND_DBG(CFG80211, DEBUG, "Really do start join AP!\n");
+	printk(KERN_ERR  "Really do start join AP!\n");
 
 	//try to connect WEP_AP with shared_key or open_system
 	if (profile->sec.security & (WEP | WEP_EXTENDED)) {
@@ -2686,16 +2689,14 @@ static void wland_cfg80211_connect_worker(struct work_struct *work)
 	}
 
 	err = wland_start_join(ifp, profile);
-	if (err)
-		WLAND_ERR("wland_start_join failed (%d)\n", err);
+	if (err) printk(KERN_ERR "wland_start_join failed (%d)\n", err);
 
-	WLAND_DBG(CFG80211, DEBUG, "Done.\n");
+	printk(KERN_ERR  "wland_cfg80211_connect_worker Done.\n");
 }
 
-static void wland_connect_restorework_timeout(ulong data)
+static void wland_connect_restorework_timeout(struct timer_list *tList)
 {
-	struct wland_cfg80211_connect_info *conn_info =
-		(struct wland_cfg80211_connect_info *) data;
+	struct wland_cfg80211_connect_info *conn_info = from_timer(conn_info, tList, connect_restorework_timeout);
 
 	WLAND_DBG(CFG80211, TRACE, "restorework timer expired\n");
 	schedule_work(&conn_info->connect_restorework_timeout_work);
@@ -2729,18 +2730,21 @@ static s32 wland_init_connect_info(struct wland_cfg80211_info *cfg)
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
 	conn_info->ndev = cfg_to_ndev(cfg);
-	init_timer(&conn_info->timer);
-	conn_info->timer.data = (unsigned long) conn_info;
-	conn_info->timer.function = wland_connect_timer;
+	
+	//init_timer(&conn_info->timer);
+	//conn_info->timer.data = (unsigned long) conn_info;
+	//conn_info->timer.function = wland_connect_timer;
 	conn_info->timer_on = false;
+	
+	timer_setup(&conn_info->timer, wland_connect_timer, 0);
 	INIT_WORK(&conn_info->work, wland_cfg80211_connect_worker);
 
-	init_timer(&conn_info->connect_restorework_timeout);
-	conn_info->connect_restorework_timeout.data = (unsigned long) conn_info;
-	conn_info->connect_restorework_timeout.function =
-		wland_connect_restorework_timeout;
-	INIT_WORK(&conn_info->connect_restorework_timeout_work,
-		cfg80211_connect_restorework_timeout_worker);
+	//init_timer(&conn_info->connect_restorework_timeout);
+	//conn_info->connect_restorework_timeout.data = (unsigned long) conn_info;
+	//conn_info->connect_restorework_timeout.function = wland_connect_restorework_timeout;
+	
+	timer_setup(&conn_info->connect_restorework_timeout, wland_connect_restorework_timeout, 0);
+	INIT_WORK(&conn_info->connect_restorework_timeout_work, cfg80211_connect_restorework_timeout_worker);
 
 	conn_info->data = cfg;
 
@@ -2829,7 +2833,6 @@ void ParseNetworkInfo(struct wland_bss_info_le *bi, u8 * pu8MsgBuffer)
 	u8 *pu8WidVal, *pbuf;
 
 	u8MsgType = pu8MsgBuffer[0];
-
 	/*
 	 * Check whether the received message type is 'N'
 	 */
@@ -2953,8 +2956,7 @@ void ParseNetworkInfo(struct wland_bss_info_le *bi, u8 * pu8MsgBuffer)
 
 }
 
-static s32 notify_escan_handler(struct wland_if *ifp,
-	const struct wland_event_msg *e, void *data)
+static s32 notify_escan_handler(struct wland_if *ifp, const struct wland_event_msg *e, void *data)
 {
 	struct wland_cfg80211_info *cfg = ifp->drvr->config;
 	struct wland_bss_info_le *bss = NULL;
@@ -3008,11 +3010,9 @@ static s32 notify_escan_handler(struct wland_if *ifp,
 			"Get BSS(BSSID:%pM, RSSI:%d, SSID:\"%s\")\n",
 			bss_info_le.BSSID, bss_info_le.RSSI, bss_info_le.SSID);
 
-		mutex_lock(&cfg->scan_result_lock);
 		list_for_each_entry(bss, &cfg->scan_result_list, list) {
 			if (compare_update_same_bss(cfg, bss, &bss_info_le)) {
 				bss->time = jiffies;
-				mutex_unlock(&cfg->scan_result_lock);
 				goto exit;
 			}
 		}
@@ -3032,7 +3032,6 @@ static s32 notify_escan_handler(struct wland_if *ifp,
 			WLAND_ERR("wland_alloc_bss error\n");
 			err = PTR_ERR(new_bss);
 		}
-		mutex_unlock(&cfg->scan_result_lock);
 
 	} else {
 		WLAND_DBG(CFG80211, TRACE,
@@ -3264,8 +3263,7 @@ static s32 cfg80211_flush_pmksa(struct wiphy *wiphy, struct net_device *ndev)
  * scan request in the form of cfg80211_scan_request. For timebeing, create
  * cfg80211_scan_request one out of the received PNO event.
  */
- static s32 notify_sched_scan_results(struct wland_if *ifp,
-	const struct wland_event_msg *e, void *data)
+ static s32 notify_sched_scan_results(struct wland_if *ifp, const struct wland_event_msg *e, void *data)
 {
 	struct wland_cfg80211_info *cfg = ifp->drvr->config;
 	struct wland_pno_net_info_le *netinfo, *netinfo_start;
@@ -3372,7 +3370,7 @@ out_err:
 	kfree(ssid);
 	kfree(channel);
 	kfree(request);
-	cfg80211_sched_scan_stopped(wiphy);
+	cfg80211_sched_scan_stopped(wiphy,0);
 
 	WLAND_DBG(CFG80211, TRACE, "Done(error)\n");
 	return err;
@@ -3495,8 +3493,7 @@ static int cfg80211_sched_scan_start(struct wiphy *wiphy,
 	return ret;
 }
 
-static int cfg80211_sched_scan_stop(struct wiphy *wiphy,
-	struct net_device *ndev)
+static int cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *ndev, u64 reqid)
 {
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 
@@ -3567,6 +3564,7 @@ static s32 wland_configure_wpaie(struct net_device *ndev,
 		break;
 	case WPA_CIPHER_WEP_40:
 		WLAND_DBG(CFG80211, TRACE, "WPA_CIPHER_WEP_40\n");
+		break;
 	case WPA_CIPHER_WEP_104:
 		WLAND_DBG(CFG80211, TRACE, "WPA_CIPHER_WEP_104\n");
 		gval = WEP_ENABLED;
@@ -3619,6 +3617,7 @@ static s32 wland_configure_wpaie(struct net_device *ndev,
 			break;
 		case WPA_CIPHER_WEP_40:
 			WLAND_DBG(CFG80211, TRACE, "WPA_CIPHER_WEP_40\n");
+			break;
 		case WPA_CIPHER_WEP_104:
 			WLAND_DBG(CFG80211, TRACE, "WPA_CIPHER_WEP_104\n");
 			pval |= WEP_ENABLED;
@@ -4326,7 +4325,7 @@ static s32 cfg80211_start_ap(struct wiphy *wiphy, struct net_device *ndev,
 	enum nl80211_iftype dev_role;
 	s32 ie_offset, err = -EPERM;
 
-	WLAND_DBG(CFG80211, DEBUG, "ssid=%s(%zu), "
+	WLAND_ERR( "ssid=%s(%zu), "
 		"auth_type=%d, "
 		"inactivity_timeout=%d, "
 		"beacon_interval=%d, "
@@ -4346,7 +4345,7 @@ static s32 cfg80211_start_ap(struct wiphy *wiphy, struct net_device *ndev,
 	/*
 	 * Show AP settings
 	 */
-	WLAND_DBG(CFG80211, DEBUG,
+	WLAND_ERR(
 		"\n"
 		"BeaconIEs  (%p) BeaconIEsLen  (%u)\n"
 		"ProbeRspIEs(%p) ProbeRspIEsLen(%u)\n"
@@ -4554,7 +4553,7 @@ exit:
 	return err;
 }
 
-static int cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev)
+static int cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev, unsigned int link_id)
 {
 	struct wland_if *ifp = netdev_priv(ndev);
 	s32 err = 0;
@@ -4627,8 +4626,7 @@ static s32 cfg80211_change_beacon(struct wiphy *wiphy, struct net_device *ndev,
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0) */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
-static int cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev,
-	u8 * mac)
+static int cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, struct station_del_parameters *params)
 {
 #ifdef WLAND_P2P_SUPPORT
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
@@ -4637,12 +4635,12 @@ static int cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev,
 	struct wland_scb_val_le scbval;
 	s32 err = 0;
 
-	if (!mac) {
+	if (!params->mac) {
 		WLAND_ERR("mac addr is NULL ignore it\n");
 		return err;
 	}
 
-	WLAND_DBG(CFG80211, TRACE, "Enter(%pM)\n", mac);
+	WLAND_DBG(CFG80211, TRACE, "Enter(%pM)\n", params->mac);
 
 #ifdef WLAND_P2P_SUPPORT
 	if (ifp->vif == cfg->p2p.bss_idx[P2PAPI_BSSCFG_DEVICE].vif)
@@ -4652,7 +4650,7 @@ static int cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev,
 	if (!check_vif_up(ifp->vif))
 		return -EIO;
 
-	memcpy(&scbval.ea, mac, ETH_ALEN);
+	memcpy(&scbval.ea, params->mac, ETH_ALEN);
 
 	scbval.val = cpu_to_le32(WLAN_REASON_DEAUTH_LEAVING);
 
@@ -4665,30 +4663,11 @@ static int cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev,
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0) */
 
-static void cfg80211_mgmt_frame_register(struct wiphy *wiphy,
-#if  LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-	struct wireless_dev *wdev,
-#else				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct net_device *dev,
-#endif				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	u16 frame_type, bool reg)
+static void cfg80211_mgmt_frame_register(struct wiphy *wiphy, struct wireless_dev *wdev, struct mgmt_frame_regs *upd)
 {
-#if    LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-	struct wland_cfg80211_vif *vif =
-		container_of(wdev, struct wland_cfg80211_vif, wdev);
-#else /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct wland_cfg80211_vif *vif = ndev_to_vif(dev);
-#endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	u16 mgmt_type = (frame_type & IEEE80211_FCTL_STYPE) >> 4;
+	struct wland_cfg80211_vif *vif = container_of(wdev, struct wland_cfg80211_vif, wdev);
 
-	WLAND_DBG(CFG80211, TRACE,
-		"(frame_type: 0x%04x,reg:%x,mgmt_type:0x%x),Enter\n",
-		frame_type, reg, mgmt_type);
-
-	if (reg)
-		vif->mgmt_rx_reg |= BIT(mgmt_type);
-	else
-		vif->mgmt_rx_reg &= ~BIT(mgmt_type);
+	vif->mgmt_rx_reg = upd->interface_stypes;
 }
 
 static s32 cfg80211_change_bss(struct wiphy *wiphy, struct net_device *dev,
@@ -4702,28 +4681,14 @@ static s32 cfg80211_change_bss(struct wiphy *wiphy, struct net_device *dev,
 	return 0;
 }
 
-static s32 cfg80211_mgmt_tx(struct wiphy *wiphy,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-	struct wireless_dev *wdev,
-#else				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct net_device *ndev,
-#endif				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct ieee80211_channel *channel, bool offchan,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-	enum nl80211_channel_type channel_type, bool channel_type_vaild,
-#endif
-	unsigned int wait, const u8 * buf, size_t len,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
-	bool no_cck,
-#endif				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0) */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0)
-	bool dont_wait_for_ack,
-#endif				/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0) */
-	u64 * cookie)
+static s32 cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev, struct cfg80211_mgmt_tx_params *params,	u64 * cookie)
 {
 #ifdef WLAND_P2P_SUPPORT
 	struct wland_cfg80211_info *cfg = wiphy_to_cfg(wiphy);
 #endif /* WLAND_P2P_SUPPORT */
+	const u8 *buf = params->buf;
+	size_t len = params->len;
+	struct ieee80211_channel *channel = params->chan;
 	const struct ieee80211_mgmt *mgmt = (const struct ieee80211_mgmt *) buf;
 	struct wland_fil_action_frame_le *action_frame;
 	struct wland_fil_af_params_le *af_params;
@@ -4731,12 +4696,8 @@ static s32 cfg80211_mgmt_tx(struct wiphy *wiphy,
 	s32 chan_nr, err = 0, ie_offset, ie_len;
 	u32 freq;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-	struct wland_cfg80211_vif *vif =
-		container_of(wdev, struct wland_cfg80211_vif, wdev);
-#else /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-	struct wland_cfg80211_vif *vif = ndev_to_vif(ndev);;
-#endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
+
+	struct wland_cfg80211_vif *vif = container_of(wdev, struct wland_cfg80211_vif, wdev);
 
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
@@ -4951,7 +4912,7 @@ static void cfg80211_crit_proto_stop(struct wiphy *wiphy,
 
 	clear_bit(SCAN_STATUS_SUPPRESS, &cfg->scan_status);
 } static int cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *ndev,
-	u8 * peer, enum nl80211_tdls_operation oper)
+	const u8 * peer, enum nl80211_tdls_operation oper)
 {
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_tdls_iovar_le info;
@@ -5044,7 +5005,7 @@ static s32 cfg80211_set_channel(struct wiphy *wiphy,
 			_chan);
 	}
 #endif /* WLAND_5GRF_SUPPORT */
-	if (chan->band == IEEE80211_BAND_2GHZ) {
+	if (chan->band == NL80211_BAND_2GHZ) {
 		WLAND_DBG(CFG80211, TRACE, "(BAND_2.4GHZ---->chan:%d),Enter\n",
 			_chan);
 	}
@@ -5082,7 +5043,7 @@ static struct cfg80211_ops wl_cfg80211_ops = {
 	.set_wiphy_params = cfg80211_set_wiphy_params,
 	.join_ibss = cfg80211_join_ibss,
 	.leave_ibss = cfg80211_leave_ibss,
-	.get_station = cfg80211_get_station,
+	.get_station = cfg80211_get_station_op,
 	.set_tx_power = cfg80211_set_tx_power,
 	.get_tx_power = cfg80211_get_tx_power,
 	.add_key = cfg80211_add_key,
@@ -5113,7 +5074,7 @@ static struct cfg80211_ops wl_cfg80211_ops = {
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0) */
 	.sched_scan_start = cfg80211_sched_scan_start,
 	.sched_scan_stop = cfg80211_sched_scan_stop,
-	.mgmt_frame_register = cfg80211_mgmt_frame_register,
+	.update_mgmt_frame_registrations = cfg80211_mgmt_frame_register,
 	.change_bss = cfg80211_change_bss,
 	.mgmt_tx = cfg80211_mgmt_tx,
 #if 0
@@ -5225,11 +5186,9 @@ static const struct ieee80211_txrx_stypes
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-void cfg80211_reg_notifier(struct wiphy *wiphy,
-	struct regulatory_request *request)
+void cfg80211_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 {
-	struct wland_cfg80211_info *cfg =
-		(struct wland_cfg80211_info *) wiphy_priv(wiphy);
+	struct wland_cfg80211_info *cfg = (struct wland_cfg80211_info *) wiphy_priv(wiphy);
 	struct wland_country cspec = { {
 		0}, 0, {
 		0}
@@ -5239,7 +5198,7 @@ void cfg80211_reg_notifier(struct wiphy *wiphy,
 		WLAND_ERR("Invalid arg\n");
 		return;
 	}
-
+	
 	WLAND_DBG(CFG80211, TRACE, "ccode: %c%c Initiator: %d\n",
 		request->alpha2[0], request->alpha2[1], request->initiator);
 
@@ -5251,7 +5210,7 @@ void cfg80211_reg_notifier(struct wiphy *wiphy,
 			request->initiator);
 		return;
 	}
-
+	
 	if (request->alpha2[0] == '0' && request->alpha2[1] == '0') {
 		/*
 		 * world domain
@@ -5285,7 +5244,7 @@ int cfg80211_reg_notifier(struct wiphy *wiphy,
 		WLAND_ERR("Invalid arg\n");
 		return err;
 	}
-
+	
 	WLAND_DBG(CFG80211, TRACE, "ccode: %c%c Initiator: %d\n",
 		request->alpha2[0], request->alpha2[1], request->initiator);
 
@@ -5358,6 +5317,7 @@ static struct wiphy *wland_setup_wiphy(struct device *phydev)
 	/*
 	 * scheduled scan settings
 	 */
+	
 	wiphy->max_sched_scan_ssids = WLAND_PNO_MAX_PFN_COUNT;
 	wiphy->max_match_sets = WLAND_PNO_MAX_PFN_COUNT;
 	wiphy->max_sched_scan_ie_len = SCAN_IE_LEN_MAX;
@@ -5371,12 +5331,15 @@ static struct wiphy *wland_setup_wiphy(struct device *phydev)
 #endif /* WLAND_MONITOR_SUPPORT */
 		| BIT(NL80211_IFTYPE_AP)
 #ifdef WLAND_TBD_SUPPORT
+		
 		| BIT(NL80211_IFTYPE_ADHOC)
 #endif /* WLAND_TBD_SUPPORT */
 #ifdef WLAND_P2P_SUPPORT
+		
 		| BIT(NL80211_IFTYPE_P2P_CLIENT)
 		| BIT(NL80211_IFTYPE_P2P_GO)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+		
 		| BIT(NL80211_IFTYPE_P2P_DEVICE)
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
 #endif /* WLAND_P2P_SUPPORT */
@@ -5388,7 +5351,7 @@ static struct wiphy *wland_setup_wiphy(struct device *phydev)
 #endif /* WLAND_TBD_SUPPORT */
 
 	//information about bands/channels supported by this device
-	wiphy->bands[IEEE80211_BAND_2GHZ] = &__wl_band_2ghz;
+	wiphy->bands[NL80211_BAND_2GHZ] = &__wl_band_2ghz;
 
 	/*
 	 * signal type reported in &struct cfg80211_bss.
@@ -5445,8 +5408,8 @@ static struct wiphy *wland_setup_wiphy(struct device *phydev)
 	//@WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL: Device supports remain-on-channel call.
 	//@WIPHY_FLAG_OFFCHAN_TX: Device supports direct off-channel TX.
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0)
-	wiphy->flags |=
-		WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL | WIPHY_FLAG_OFFCHAN_TX;
+
+	wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL | WIPHY_FLAG_OFFCHAN_TX;
 #endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0) */
 
 	//@WIPHY_FLAG_HAVE_AP_SME: Device integrates AP SME.
@@ -5461,7 +5424,7 @@ static struct wiphy *wland_setup_wiphy(struct device *phydev)
 	//has its own custom regulatory domain and cannot identify the
 	//ISO /IEC 3166 alpha2 it belongs to. When this is enabled
 	//we will disregard the first regulatory hint (when the initiator is %REGDOM_SET_BY_CORE).
-	wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
+	wiphy->flags |= REGULATORY_CUSTOM_REG;
 
 	WLAND_DBG(CFG80211, TRACE, "Registering custom regulatory.\n");
 
@@ -5471,6 +5434,8 @@ static struct wiphy *wland_setup_wiphy(struct device *phydev)
 	 *the reg_nodifier's request can be passed as NULL
 	 */
 	wiphy->reg_notifier = cfg80211_reg_notifier;
+	wiphy->regulatory_flags |= REGULATORY_CUSTOM_REG;
+	
 
 	wiphy_apply_custom_regulatory(wiphy, &wland_regdom);
 
@@ -5619,10 +5584,17 @@ static s32 wland_bss_roaming_done(struct wland_cfg80211_info *cfg,
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
 	struct wland_cfg80211_connect_info *conn_info = cfg_to_conn(cfg);
+	struct cfg80211_roam_info roam_info = {
+				.bssid = (u8 *) profile->bssid,
+				.req_ie = conn_info->req_ie,
+				.req_ie_len = conn_info->req_ie_len,
+				.resp_ie = conn_info->resp_ie,
+				.resp_ie_len = conn_info->resp_ie_len,
+			};
 	struct wiphy *wiphy = cfg_to_wiphy(cfg);
 	struct ieee80211_channel *notify_channel = NULL;
 	struct ieee80211_supported_band *band =
-		wiphy->bands[IEEE80211_BAND_2GHZ];
+		wiphy->bands[NL80211_BAND_2GHZ];
 	struct wland_bss_info_le *bi;
 	struct wland_chan ch;
 	u32 freq;
@@ -5654,7 +5626,7 @@ static s32 wland_bss_roaming_done(struct wland_cfg80211_info *cfg,
 	cfg->d11inf.decchspec(&ch);
 
 	if (ch.band == CHAN_BAND_2G)
-		band = wiphy->bands[IEEE80211_BAND_2GHZ];
+		band = wiphy->bands[NL80211_BAND_2GHZ];
 #ifdef WLAND_5GRF_SUPPORT
 	else
 		band = wiphy->bands[IEEE80211_BAND_5GHZ];
@@ -5666,20 +5638,15 @@ static s32 wland_bss_roaming_done(struct wland_cfg80211_info *cfg,
 done:
 	kfree(buf);
 out:
-	cfg80211_roamed(ndev,
-		notify_channel,
-		(u8 *) profile->bssid,
-		conn_info->req_ie,
-		conn_info->req_ie_len,
-		conn_info->resp_ie, conn_info->resp_ie_len, GFP_KERNEL);
+
+	roam_info.channel = notify_channel;
+	cfg80211_roamed(ndev,&roam_info, GFP_KERNEL);
 	set_bit(VIF_STATUS_CONNECTED, &ifp->vif->sme_state);
 	WLAND_DBG(CFG80211, TRACE, "Done(err:%d)\n", err);
 	return err;
 }
 
-static s32 wland_bss_connect_done(struct wland_cfg80211_info *cfg,
-	struct net_device *ndev, const struct wland_event_msg *e,
-	bool completed)
+static s32 wland_bss_connect_done(struct wland_cfg80211_info *cfg, struct net_device *ndev, const struct wland_event_msg *e, bool completed)
 {
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
@@ -5689,7 +5656,7 @@ static s32 wland_bss_connect_done(struct wland_cfg80211_info *cfg,
 	if (test_and_clear_bit(VIF_STATUS_CONNECTING, &ifp->vif->sme_state)) {
 		if (completed) {
 			//wland_get_assoc_ies(cfg, ifp);
-			WLAND_DBG(CFG80211, TRACE,
+			printk(KERN_ERR  
 				"########## connected and clear VIF_STATUS_CONNECTING\n");
 			set_bit(VIF_STATUS_CONNECTED, &ifp->vif->sme_state);
 			wland_set_phy_timeout(ifp->drvr, profile->sec.cipher_pairwise);
@@ -5703,27 +5670,26 @@ static s32 wland_bss_connect_done(struct wland_cfg80211_info *cfg,
 			conn_info->resp_ie_len,
 			completed ? WLAN_STATUS_SUCCESS :
 			WLAN_STATUS_AUTH_TIMEOUT, GFP_KERNEL);
-		WLAND_DBG(CFG80211, INFO,
-			"Report connect result - connection %s\n",
-			completed ? "succeeded" : "failed");
+		printk(KERN_ERR  "Report connect result - connection %s\n", completed ? "succeeded" : "failed");
 	}
 	WLAND_DBG(CFG80211, TRACE, "Done\n");
 	return 0;
 }
 
-static s32 notify_connect_status(struct wland_if *ifp,
-	const struct wland_event_msg *e, void *data)
+static s32 notify_connect_status(struct wland_if *ifp, const struct wland_event_msg *e,  void *data)
 {
 	struct wland_cfg80211_info *cfg = ifp->drvr->config;
 	struct wland_cfg80211_connect_info *conn_info = &cfg->conn_info;
 	struct net_device *ndev = ifp->ndev;
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
+	struct ieee80211_channel *chan;
+	struct wiphy *wiphy = cfg_to_wiphy(cfg);
+	
 	s32 err = 0;
 	u16 eventLen = 0;
 	u8 *pU8Buffer = (u8 *) data;
 
-	WLAND_DBG(CFG80211, TRACE, "Enter(ifp->vif->mode:%d)\n",
-		ifp->vif->mode);
+	WLAND_DBG(CFG80211, TRACE, "Enter(ifp->vif->mode:%d)\n", ifp->vif->mode);
 
 	if (!check_vif_up(ifp->vif)) {
 		WLAND_ERR("Vif Not SetUp(event:%d,reason:%d)\n", e->event_code,
@@ -5765,7 +5731,7 @@ static s32 notify_connect_status(struct wland_if *ifp,
 			WLAND_DUMP(RX_NETEVENT, pU8Buffer, eventLen + 4,
 				"Event len:%Zu\n", eventLen);
 			memset(&sinfo, 0, sizeof(sinfo));
-			sinfo.filled = STATION_INFO_ASSOC_REQ_IES;
+			
 			if (!pU8Buffer) {
 				WLAND_ERR
 					("No IEs present in ASSOC/REASSOC_IND");
@@ -5795,11 +5761,13 @@ static s32 notify_connect_status(struct wland_if *ifp,
 			jiffies + msecs_to_jiffies(CONNECT_RESTOREWORK_TIMER_MS));
 		WLAND_DBG(CFG80211, TRACE, "###### Set restore work timer(%d s)!\n",
 			CONNECT_RESTOREWORK_TIMER_MS);
-
+			
+		chan = ieee80211_get_channel(wiphy, (int)cfg->channel);
+		
 		if (ifp->vif->mode == WL_MODE_IBSS) {
 			memcpy(profile->bssid, e->addr, ETH_ALEN);
 			wland_inform_ibss(cfg, ndev, e->addr);
-			cfg80211_ibss_joined(ndev, e->addr, GFP_KERNEL);
+			cfg80211_ibss_joined(ndev, e->addr, chan, GFP_KERNEL);
 			clear_bit(VIF_STATUS_CONNECTING, &ifp->vif->sme_state);
 			set_bit(VIF_STATUS_CONNECTED, &ifp->vif->sme_state);
 		} else {
@@ -5842,8 +5810,7 @@ static s32 notify_connect_status(struct wland_if *ifp,
 
 			if (test_and_clear_bit(VIF_STATUS_CONNECTED,
 					&ifp->vif->sme_state)) {
-				cfg80211_disconnected(ndev, 0, NULL, 0,
-					GFP_KERNEL);
+				cfg80211_disconnected(ndev, 0, NULL, 0, false, GFP_KERNEL);
 				WLAND_DBG(CFG80211, INFO, "cfg80211_disconnected\n");
 			}
 		}
@@ -5889,8 +5856,7 @@ static s32 notify_roaming_status(struct wland_if *ifp,
 	return 0;
 }
 
-static s32 notify_vif_event(struct wland_if *ifp,
-	const struct wland_event_msg *e, void *data)
+static s32 notify_vif_event(struct wland_if *ifp, const struct wland_event_msg *e, void *data)
 {
 	struct wland_cfg80211_info *cfg = ifp->drvr->config;
 	struct wland_cfg80211_vif_event *event = &cfg->vif_event;
@@ -5899,7 +5865,6 @@ static s32 notify_vif_event(struct wland_if *ifp,
 	WLAND_DBG(CFG80211, TRACE, "Enter: action %u ifidx %u bsscfg %u\n",
 		e->action, e->ifidx, e->bsscfgidx);
 
-	mutex_lock(&event->vif_event_lock);
 	event->action = e->action;
 
 	switch (e->action) {
@@ -5908,7 +5873,6 @@ static s32 notify_vif_event(struct wland_if *ifp,
 		 * waiting process may have timed out
 		 */
 		if (!cfg->vif_event.vif) {
-			mutex_unlock(&event->vif_event_lock);
 			return -EBADF;
 		}
 
@@ -5921,12 +5885,10 @@ static s32 notify_vif_event(struct wland_if *ifp,
 
 			SET_NETDEV_DEV(ifp->ndev, wiphy_dev(cfg->wiphy));
 		}
-		mutex_unlock(&event->vif_event_lock);
 		wake_up(&event->vif_wq);
 		return 0;
 
 	case WLAND_E_IF_DEL:
-		mutex_unlock(&event->vif_event_lock);
 		/*
 		 * event may not be upon user request
 		 */
@@ -5935,12 +5897,10 @@ static s32 notify_vif_event(struct wland_if *ifp,
 		return 0;
 
 	case WLAND_E_IF_CHANGE:
-		mutex_unlock(&event->vif_event_lock);
 		wake_up(&event->vif_wq);
 		return 0;
 
 	default:
-		mutex_unlock(&event->vif_event_lock);
 		break;
 	}
 
@@ -5950,13 +5910,11 @@ static s32 notify_vif_event(struct wland_if *ifp,
 static void wland_register_event_handlers(struct wland_cfg80211_info *cfg)
 {
 	firmweh_register(cfg->pub, WLAND_E_ESCAN_RESULT, notify_escan_handler);
-	firmweh_register(cfg->pub, WLAND_E_DISCONNECT_IND,
-		notify_connect_status);
+	firmweh_register(cfg->pub, WLAND_E_DISCONNECT_IND, notify_connect_status);
 	firmweh_register(cfg->pub, WLAND_E_CONNECT_IND, notify_connect_status);
 
 	firmweh_register(cfg->pub, WLAND_E_ROAM, notify_roaming_status);
-	firmweh_register(cfg->pub, WLAND_E_PFN_NET_FOUND,
-		notify_sched_scan_results);
+	firmweh_register(cfg->pub, WLAND_E_PFN_NET_FOUND, notify_sched_scan_results);
 
 	firmweh_register(cfg->pub, WLAND_E_IF_ADD, notify_vif_event);
 	firmweh_register(cfg->pub, WLAND_E_IF_DEL, notify_vif_event);
@@ -6086,7 +6044,7 @@ static s32 wland_construct_reginfo(struct wland_cfg80211_info *cfg, u32 bw_cap)
 	u8 *pbuf;
 	s32 err;
 	u32 i, j, total, channel, index, ht40_flag, array_size;
-	enum ieee80211_band band;
+	enum nl80211_band band;
 	u32 *n_cnt;
 	bool ht40_allowed, update;
 
@@ -6119,7 +6077,7 @@ static s32 wland_construct_reginfo(struct wland_cfg80211_info *cfg, u32 bw_cap)
 			band_chan_arr = __wl_2ghz_channels;
 			array_size = ARRAY_SIZE(__wl_2ghz_channels);
 			n_cnt = &__wl_band_2ghz.n_channels;
-			band = IEEE80211_BAND_2GHZ;
+			band = NL80211_BAND_2GHZ;
 			ht40_allowed = (bw_cap == WLC_N_BW_40ALL);
 		}
 #ifdef WLAND_5GRF_SUPPORT
@@ -6193,11 +6151,10 @@ static s32 wland_construct_reginfo(struct wland_cfg80211_info *cfg, u32 bw_cap)
 				if (!err) {
 					if (channel & WL_CHAN_RADAR)
 						band_chan_arr[index].flags |=
-							(IEEE80211_CHAN_RADAR |
-							IEEE80211_CHAN_NO_IBSS);
+							(IEEE80211_CHAN_RADAR );
 					if (channel & WL_CHAN_PASSIVE)
 						band_chan_arr[index].flags |=
-							IEEE80211_CHAN_PASSIVE_SCAN;
+							IEEE80211_CHAN_NO_IR;
 				}
 			}
 			if (!update)
@@ -6213,13 +6170,12 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 {
 	struct wland_if *ifp = netdev_priv(cfg_to_ndev(cfg));
 	struct wiphy *wiphy = cfg_to_wiphy(cfg);
-	struct ieee80211_supported_band *bands[IEEE80211_NUM_BANDS];
+	struct ieee80211_supported_band *bands[NUM_NL80211_BANDS];
 	s32 phy_list, err, i, index;
 	u32 band_list[3], nmode, nband, bw_cap = 0;
 	s8 phy;
 
-	err = wland_fil_iovar_data_get(ifp, "get_phylist", &phy_list,
-		sizeof(phy_list));
+	err = wland_fil_iovar_data_get(ifp, "get_phylist", &phy_list, sizeof(phy_list));
 	if (err < 0) {
 		WLAND_ERR("WLAND_C_GET_PHYLIST error (%d)\n", err);
 		return err;
@@ -6230,11 +6186,11 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 	WLAND_DBG(CFG80211, TRACE, "GET_PHYLIST reported: %c phy\n", phy);
 
 	err = wland_fil_iovar_data_get(ifp, "nmode", &nmode, sizeof(nmode));
+	
 	if (err < 0) {
 		WLAND_ERR("nmode error (%d)\n", err);
 	} else {
-		err = wland_fil_iovar_data_get(ifp, "mimo_bw_cap", &bw_cap,
-			sizeof(bw_cap));
+		err = wland_fil_iovar_data_get(ifp, "mimo_bw_cap", &bw_cap, sizeof(bw_cap));
 		/*
 		 * set default value
 		 */
@@ -6246,7 +6202,7 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 			WLAND_ERR("mimo_bw_cap error (%d)\n", err);
 	}
 	WLAND_DBG(CFG80211, TRACE, "nmode=%d, mimo_bw_cap=%d\n", nmode, bw_cap);
-
+	
 	err = wland_construct_reginfo(cfg, bw_cap);
 	if (err < 0) {
 		WLAND_ERR("construct reginfo failed (%d)\n", err);
@@ -6255,12 +6211,15 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 
 	nband = band_list[0];
 	memset(bands, 0, sizeof(bands));
-
-	for (i = 1; i <= nband && i < ARRAY_SIZE(band_list); i++) {
+	
+	
+	for (i = 1; i <= nband && i < ARRAY_SIZE(band_list); i++)
+	{
 		index = -1;
 #ifdef WLAND_5GRF_SUPPORT
 		if ((band_list[i] == WLC_BAND_5G)
-			&& (__wl_band_5ghz_a.n_channels > 0)) {
+			&& (__wl_band_5ghz_a.n_channels > 0)) 
+		{
 			index = IEEE80211_BAND_5GHZ;
 			bands[index] = &__wl_band_5ghz_a;
 
@@ -6272,7 +6231,7 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 #endif /*WLAND_5GRF_SUPPORT */
 		if ((band_list[i] == WLC_BAND_2G)
 			&& (__wl_band_2ghz.n_channels > 0)) {
-			index = IEEE80211_BAND_2GHZ;
+			index = NL80211_BAND_2GHZ;
 			bands[index] = &__wl_band_2ghz;
 
 			if (bw_cap == WLC_N_BW_40ALL)
@@ -6285,7 +6244,8 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 		/*
 		 * setup 802.11n
 		 */
-		if ((index >= 0) && nmode) {
+		if ((index >= 0) && nmode)
+		{
 			bands[index]->ht_cap.ht_supported = true;
 			bands[index]->ht_cap.cap |=
 				(1 << IEEE80211_HT_CAP_RX_STBC_SHIFT);
@@ -6309,28 +6269,32 @@ static s32 wland_update_wiphybands(struct wland_cfg80211_info *cfg, bool notify)
 #endif /*WLAND_TBD_SUPPORT */
 		}
 	}
+	
 
-	wiphy->bands[IEEE80211_BAND_2GHZ] = bands[IEEE80211_BAND_2GHZ];
+	wiphy->bands[NL80211_BAND_2GHZ] = bands[NL80211_BAND_2GHZ];
+
+	
 #ifdef WLAND_5GRF_SUPPORT
+	
 	wiphy->bands[IEEE80211_BAND_5GHZ] = bands[IEEE80211_BAND_5GHZ];
 #endif /*WLAND_5GRF_SUPPORT */
-	if (notify)
-		wiphy_apply_custom_regulatory(wiphy, &wland_regdom);
+
+	
+
+	if (notify) wiphy_apply_custom_regulatory(wiphy, &wland_regdom);
 
 	return err;
 }
 
 #ifdef WLAND_INIT_SCAN_SUPPORT
-static inline void wland_init_scan(struct wland_cfg80211_info *cfg,
-	struct net_device * ndev, struct wireless_dev *wdev)
+static inline void wland_init_scan(struct wland_cfg80211_info *cfg, struct net_device * ndev, struct wireless_dev *wdev)
 {
 	//init scan
 	struct cfg80211_scan_request request;
 	struct cfg80211_ssid ssids;
 	memset(&request, 0, sizeof(request));
-#if   LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 	request.wdev = wdev;
-#endif
+
 	request.n_ssids = 1;
 
 	ssids.ssid_len = 0;
@@ -6340,11 +6304,7 @@ static inline void wland_init_scan(struct wland_cfg80211_info *cfg,
 	//request.n_ssids = 1;
 	//request.ssids = NULL;
 
-	cfg80211_scan(cfg->wiphy,
-#if    LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-	ndev,
-#endif/*LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0) */
-	&request);
+	cfg80211_scan(cfg->wiphy,&request);
 }
 #endif
 
@@ -6354,8 +6314,7 @@ s32 wland_cfg80211_up(struct net_device * ndev)
 	struct wland_cfg80211_info *cfg = ndev_to_cfg(ndev);
 	struct wireless_dev *wdev = ndev->ieee80211_ptr;
 	s32 power_mode, err = 0;
-
-	mutex_lock(&cfg->usr_sync);
+	
 
 	set_bit(VIF_STATUS_READY, &ifp->vif->sme_state);
 
@@ -6363,7 +6322,7 @@ s32 wland_cfg80211_up(struct net_device * ndev)
 		WLAND_ERR("dongle up\n");
 		goto up_exit;
 	}
-
+	
 	power_mode = cfg->pwr_save ? MIN_FAST_PS : NO_POWERSAVE;
 
 	WLAND_DBG(CFG80211, TRACE, "power save set to %s\n",
@@ -6374,11 +6333,9 @@ s32 wland_cfg80211_up(struct net_device * ndev)
 	if (err < 0)
 		goto up_exit;
 
-	err = cfg80211_change_virtual_iface(wdev->wiphy, ndev, wdev->iftype,
-		NULL, NULL);
+	err = cfg80211_change_virtual_iface(wdev->wiphy, ndev, wdev->iftype, NULL);
 	if (err < 0)
 		goto up_exit;
-
 	/*
 	 * according chip cap to update wiphybands
 	 */
@@ -6391,7 +6348,6 @@ s32 wland_cfg80211_up(struct net_device * ndev)
 	wland_init_scan(cfg, ndev, wdev);
 #endif
 up_exit:
-	mutex_unlock(&cfg->usr_sync);
 
 	WLAND_DBG(CFG80211, TRACE, "Done(err:%d)\n", err);
 
@@ -6414,7 +6370,6 @@ s32 wland_cfg80211_down(struct net_device * ndev)
 	/*
 	 * While going down, if associated with AP disassociate from AP to save power
 	 */
-	mutex_lock(&cfg->usr_sync);
 	if (check_vif_up(ifp->vif)) {
 		wland_link_down(ifp->vif);
 
@@ -6426,7 +6381,6 @@ s32 wland_cfg80211_down(struct net_device * ndev)
 	}
 	wland_abort_scanning(cfg);
 	clear_bit(VIF_STATUS_READY, &ifp->vif->sme_state);
-	mutex_unlock(&cfg->usr_sync);
 
 fail:
 	WLAND_DBG(CFG80211, TRACE, "Done(err:%d)\n", err);
@@ -6454,9 +6408,7 @@ static inline bool vif_event_equals(struct wland_cfg80211_vif_event *event,
 {
 	u8 evt_action;
 
-	mutex_lock(&event->vif_event_lock);
 	evt_action = event->action;
-	mutex_unlock(&event->vif_event_lock);
 
 	WLAND_DBG(CFG80211, TRACE, "Enter(evt_action:%d)\n", evt_action);
 
@@ -6470,10 +6422,8 @@ void wland_cfg80211_arm_vif_event(struct wland_cfg80211_info *cfg,
 
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
-	mutex_lock(&event->vif_event_lock);
 	event->vif = vif;
 	event->action = 0;
-	mutex_unlock(&event->vif_event_lock);
 }
 
 bool wland_cfg80211_vif_event_armed(struct wland_cfg80211_info *cfg)
@@ -6481,9 +6431,7 @@ bool wland_cfg80211_vif_event_armed(struct wland_cfg80211_info *cfg)
 	struct wland_cfg80211_vif_event *event = &cfg->vif_event;
 	bool armed;
 
-	mutex_lock(&event->vif_event_lock);
 	armed = event->vif != NULL;
-	mutex_unlock(&event->vif_event_lock);
 
 	WLAND_DBG(CFG80211, TRACE, "Enter(armed:%d)\n", armed);
 
@@ -6502,8 +6450,7 @@ int wland_cfg80211_wait_vif_event_timeout(struct wland_cfg80211_info *cfg,
 }
 
 /* attach to cfg80211 mode */
-struct wland_cfg80211_info *cfg80211_attach(struct wland_private *drvr,
-	struct device *busdev)
+struct wland_cfg80211_info *cfg80211_attach(struct wland_private *drvr, struct device *busdev)
 {
 	struct net_device *ndev = drvr->iflist[0]->ndev;
 	struct wland_cfg80211_info *cfg;
@@ -6511,6 +6458,8 @@ struct wland_cfg80211_info *cfg80211_attach(struct wland_private *drvr,
 	struct wland_cfg80211_vif *vif;
 	struct wland_if *ifp = netdev_priv(ndev);
 	s32 err = 0;
+	
+	printk(KERN_ERR "cfg80211_attach 1\n");
 
 	if (!ndev) {
 		WLAND_ERR("ndev is invalid\n");
@@ -6535,7 +6484,6 @@ struct wland_cfg80211_info *cfg80211_attach(struct wland_private *drvr,
 
 	init_waitqueue_head(&cfg->vif_event.vif_wq);
 
-	mutex_init(&cfg->vif_event.vif_event_lock);
 
 	INIT_LIST_HEAD(&cfg->vif_list);
 
@@ -6558,12 +6506,10 @@ struct wland_cfg80211_info *cfg80211_attach(struct wland_private *drvr,
 	cfg->active_scan = true;	/* we do active scan for specific scan per default */
 	cfg->dongle_up = false;	/* chip is not up yet */
 
-	mutex_init(&cfg->usr_sync);
 
 #ifdef WLAND_INIT_SCAN_SUPPORT
 	atomic_set(&cfg->init_scan, 0);
 #endif
-	mutex_init(&cfg->scan_result_lock);
 	INIT_LIST_HEAD(&cfg->scan_result_list);
 	cfg->scan_results.version = SCAN_VERSION_NUM;
 	cfg->scan_results.count = 0;
@@ -6587,10 +6533,11 @@ struct wland_cfg80211_info *cfg80211_attach(struct wland_private *drvr,
 	/*
 	 * Init scan_timeout timer
 	 */
-	init_timer(&cfg->scan_timeout);
-	cfg->scan_timeout.data = (ulong) cfg;
-	cfg->scan_timeout.function = wland_scan_timeout;
-
+	//init_timer(&cfg->scan_timeout);
+	//cfg->scan_timeout.data = (ulong) cfg;
+	//cfg->scan_timeout.function = wland_scan_timeout;
+	timer_setup(&cfg->scan_timeout, wland_scan_timeout, 0);
+	
 	INIT_WORK(&cfg->scan_report_work, cfg80211_scan_report_worker);
 
 	err = wland_init_connect_info(cfg);

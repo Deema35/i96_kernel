@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# RDA subsystem configuration
+#
+
+menuconfig RDA_SUPPORT
+	tristate "RDA support"
+	depends on ARCH_RDA
+	help
+		This selects support various RDA devices
+		
+	  
+config MMC_RDA
+	depends on RDA_SUPPORT
+	depends on ARCH_RDA
+	tristate "RDA SD/SDIO/eMMC Interface support"
+	help
+	This selects the RDA SD/SDIO/eMMC Interface.
+	  If no scatter/gather DMA, MMC_BLOCK_BOUNCE would be selected.
+	  say Y or M here.
+	  If unsure, say N.
+	  
+config CLK_RDA
+	depends on RDA_SUPPORT
+	depends on ARCH_RDA
+	bool "RDA clock"
+	help
+	  RDA clock tree
+	  
+
+	  
+	  
+source "drivers/rda/net/Kconfig"

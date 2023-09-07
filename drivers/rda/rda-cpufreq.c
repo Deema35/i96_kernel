@@ -29,10 +29,10 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/suspend.h>
-#include <mach/rda_clk_name.h>
+#include <rda/mach/rda_clk_name.h>
 #include <rda/tgt_ap_clock_config.h>
-#include <plat/ap_clk.h>
-#include <plat/md_sys.h>
+#include "ap_clk.h"
+#include <rda/plat/md_sys.h>
 
 
 #define NUM_CPUS		CONFIG_NR_CPUS
@@ -50,11 +50,11 @@ static struct cpufreq_frequency_table freq_table[] = {
 	 * CPU frequency range can NOT be too large, otherwise VCORE
 	 * fluctuation might impact DDR.
 	 */
-	{ 0, PLL_CPU_FREQ / 3 * 1 / 1000 },
-	{ 1, PLL_CPU_FREQ / 5 * 2 / 1000 },
-	{ 2, PLL_CPU_FREQ / 2 * 1 / 1000 },
-	{ 3, PLL_CPU_FREQ / 1 * 1 / 1000 },
-	{ 4, CPUFREQ_TABLE_END },
+	{0, 0, PLL_CPU_FREQ / 3 * 1 / 1000 },
+	{0, 1, PLL_CPU_FREQ / 5 * 2 / 1000 },
+	{0, 2, PLL_CPU_FREQ / 2 * 1 / 1000 },
+	{0, 3, PLL_CPU_FREQ / 1 * 1 / 1000 },
+	{0, 4, CPUFREQ_TABLE_END },
 };
 #define FREQ_TABLE_SIZE ARRAY_SIZE(freq_table)
 
@@ -76,11 +76,11 @@ static struct cpufreq_frequency_table low_freq_table[] = {
 	 * CPU frequency range can NOT be too large, otherwise VCORE
 	 * fluctuation might impact DDR.
 	 */
-	{ 0, PLL_CPU_FREQ_LOW / 3 * 1 / 1000 },
-	{ 1, PLL_CPU_FREQ_LOW / 5 * 2 / 1000 },
-	{ 2, PLL_CPU_FREQ_LOW / 2 * 1 / 1000 },
-	{ 3, PLL_CPU_FREQ_LOW / 1 * 1 / 1000 },
-	{ 4, CPUFREQ_TABLE_END },
+	{0, 0, PLL_CPU_FREQ_LOW / 3 * 1 / 1000 },
+	{0, 1, PLL_CPU_FREQ_LOW / 5 * 2 / 1000 },
+	{0, 2, PLL_CPU_FREQ_LOW / 2 * 1 / 1000 },
+	{0, 3, PLL_CPU_FREQ_LOW / 1 * 1 / 1000 },
+	{0, 4, CPUFREQ_TABLE_END },
 };
 #endif
 
@@ -92,6 +92,7 @@ static unsigned int ladder_index = 2;
 
 static struct clk *cpu_clk = NULL;
 
+
 static unsigned long target_cpu_index[NUM_CPUS];
 static struct msys_device *cpu_msys_dev = NULL;
 
@@ -99,13 +100,15 @@ static DEFINE_MUTEX(rda_cpu_lock);
 
 
 
-static int rda_verify_speed(struct cpufreq_policy *policy)
+static int rda_verify_speed(struct cpufreq_policy_data *policy)
 {
+	
 	return cpufreq_frequency_table_verify(policy, cur_freq_table);
 }
 
 static unsigned int rda_get_speed(unsigned int cpu)
 {
+	
 	return clk_get_rate(cpu_clk) / 1000;
 }
 
@@ -133,6 +136,7 @@ static unsigned long rda_cpu_highest_index(void)
 	return index;
 }
 
+
 static void rda_update_cpu_speed(struct cpufreq_policy *policy)
 {
 	int ret;
@@ -141,7 +145,7 @@ static void rda_update_cpu_speed(struct cpufreq_policy *policy)
 
 	old = rda_get_index(rda_get_speed(0));
 	new = rda_cpu_highest_index();
-
+	
 	freqs.new = cur_freq_table[new].frequency;
 	freqs.old = cur_freq_table[old].frequency;
 	pr_debug("cpu-rda: transition: %u KHz (old %d) --> %u KHz(new %d)\n",
@@ -150,9 +154,10 @@ static void rda_update_cpu_speed(struct cpufreq_policy *policy)
 	if (old == new)
 		return;
 
+	printk(KERN_INFO  "rda_update_cpu_speed 3\n");
 
-	for_each_online_cpu(freqs.cpu) {
-		cpufreq_notify_transition(policy, &freqs, CPUFREQ_PRECHANGE);
+	for_each_online_cpu(freqs.policy->cpu) {
+		cpufreq_freq_transition_begin(policy, &freqs);
 	}
 
 
@@ -182,35 +187,31 @@ static void rda_update_cpu_speed(struct cpufreq_policy *policy)
 			udelay(10);
 		}
 	}
-
-	for_each_online_cpu(freqs.cpu) {
-		cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
+	printk(KERN_INFO  "rda_update_cpu_speed 4\n");
+	for_each_online_cpu(freqs.policy->cpu) {
+		cpufreq_freq_transition_end(policy, &freqs, 0);
 	}
 }
 
-static int rda_target(struct cpufreq_policy *policy,
-		       unsigned int target_freq,
-		       unsigned int relation)
+static int rda_target(struct cpufreq_policy *policy,  unsigned int target_freq, unsigned int relation)
 {
 	unsigned int idx;
 	int ret = 0;
 
-	mutex_lock(&rda_cpu_lock);
-
-	ret = cpufreq_frequency_table_target(policy, cur_freq_table, target_freq,
-		relation, &idx);
+	
+	printk(KERN_INFO  "rda_target,  policy = %08x, target_freq = %d, relation = %d\n", policy, target_freq, relation);
+	
+	ret = cpufreq_frequency_table_target(policy, target_freq, relation);
 	if (ret) {
 		pr_err("cpu%d: no freq match for %d(ret=%d)\n",
 			policy->cpu, target_freq, ret);
-		goto out;
+		return ret;
 	}
 
 	target_cpu_index[policy->cpu] = idx;
-
 	rda_update_cpu_speed(policy);
-out:
-	mutex_unlock(&rda_cpu_lock);
 
+	
 	return ret;
 }
 
@@ -224,37 +225,26 @@ static int rda_cpu_init(struct cpufreq_policy *policy)
 
 	pr_info("initialize cpu frequency for cpu %u\n", policy->cpu);
 
-	if (!cpu_clk)
+	if (cpu_clk)
 	{
-		cpu_clk = clk_get(NULL, RDA_CLK_CPU);
-		if (IS_ERR(cpu_clk)) {
-			ret = PTR_ERR(cpu_clk);
-			cpu_clk = NULL;
-			pr_info("cpu clock get error %d\n", ret);
-			goto out;
-		}
 		clk_prepare_enable(cpu_clk);
-
 		cpufreq_frequency_table_cpuinfo(policy, cur_freq_table);
-		cpufreq_frequency_table_get_attr(cur_freq_table, policy->cpu);
 	}
-
+	else goto out;
 	index = rda_get_index(rda_get_speed(0));
 	target_cpu_index[policy->cpu] = index;
 	policy->cur = cur_freq_table[index].frequency;
 	/* FIXME: what's the actual transition time? */
 	policy->cpuinfo.transition_latency = 300 * 1000;
-
 	policy->shared_type = CPUFREQ_SHARED_TYPE_ALL;
 	cpumask_copy(policy->related_cpus, cpu_possible_mask);
-
 out:
-	if (ret) {
-		if (cpu_clk) {
-			clk_put(cpu_clk);
-			cpu_clk = NULL;
-		}
+	
+	if (cpu_clk) {
+		clk_put(cpu_clk);
+		cpu_clk = NULL;
 	}
+	
 
 	return ret;
 }
@@ -262,6 +252,7 @@ out:
 static int rda_cpu_exit(struct cpufreq_policy *policy)
 {
 	if (cpu_clk) {
+		clk_disable_unprepare(cpu_clk);
 		clk_put(cpu_clk);
 		cpu_clk = NULL;
 	}
@@ -274,7 +265,6 @@ static struct freq_attr *rda_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver rda_cpufreq_driver = {
-	.flags 		= CPUFREQ_STICKY,
 	.verify		= rda_verify_speed,
 	.target		= rda_target,
 	.get		= rda_get_speed,
@@ -336,7 +326,7 @@ static int rda_ap_clock_adjust(int high_freq)
 
 	for_each_online_cpu(freqs.cpu) {
 		cpufreq_frequency_table_get_attr(cur_freq_table, freqs.cpu);
-		cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
+		cpufreq_freq_transition_end(policy, &freqs, 0);
 	}
 
 	(void)cpufreq_update_policy(0);
@@ -350,10 +340,18 @@ static int rda_ap_clock_adjust(int high_freq)
 static int rda_ap_clock_adjust(int high_freq)
 {
 	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
+
 	if (high_freq == 0)
-		policy->user_policy.max = freq_table[HIGHEST_FREQ_INDEX - 1].frequency;
+		//policy->user_policy.max = freq_table[HIGHEST_FREQ_INDEX - 1].frequency;
+		freq_qos_add_request(&policy->constraints,
+					   policy->max_freq_req, FREQ_QOS_MAX,
+					   freq_table[HIGHEST_FREQ_INDEX - 1].frequency);
 	else
-		policy->user_policy.max = freq_table[HIGHEST_FREQ_INDEX].frequency;
+		//policy->user_policy.max = freq_table[HIGHEST_FREQ_INDEX].frequency;
+	
+		freq_qos_add_request(&policy->constraints,
+					   policy->max_freq_req, FREQ_QOS_MAX,
+					   freq_table[HIGHEST_FREQ_INDEX].frequency);
 
 	(void)cpufreq_update_policy(0);
 	return 0;
@@ -427,34 +425,78 @@ int __init rda_cpu_freq_init_sysfs(void)
 		printk(KERN_ERR "sysfs_create_file rda_ap_pll_freq failed: %d\n", error);
 	return error;
 }
-static int __init rda_cpufreq_init(void)
+static int  rda_cpufreq_hw_driver_probe(struct platform_device *pdev)
 {
-
-	// ap <---> modem temperature controll
-	cpu_msys_dev = rda_msys_alloc_device();
-	if (!cpu_msys_dev) {
-		return -EINVAL;;
+	int ret;
+		
+	cpu_clk = clk_get(&pdev->dev, NULL);
+	if (IS_ERR(cpu_clk))
+	{
+		ret = PTR_ERR(cpu_clk);
+		cpu_clk = NULL;
+		printk(KERN_ERR "cpu clock get error %d\n", ret);
+		
 	}
-
-	//pr_info("%s: register ap bp communication\n",__FUNCTION__);
-	cpu_msys_dev->module = SYS_PM_MOD;
-	cpu_msys_dev->name = "rda-cpu-freq";
-	cpu_msys_dev->notifier.notifier_call = rda_set_cpufreq_max;
-
-	rda_msys_register_device(cpu_msys_dev);
-	rda_cpu_freq_init_sysfs();
+	else printk(KERN_ERR "cpu clock sucssed\n");
+	
 	return cpufreq_register_driver(&rda_cpufreq_driver);
 }
 
-static void __exit rda_cpufreq_exit(void)
+static int rda_cpufreq_hw_driver_remove(struct platform_device *pdev)
+{
+	
+	return cpufreq_unregister_driver(&rda_cpufreq_driver);
+}
+
+static const struct of_device_id rda_cpufreq_hw_match[] = {
+	{ .compatible = "rda,cpufreq-hw" },
+	{}
+};
+
+MODULE_DEVICE_TABLE(of, rda_cpufreq_hw_match);
+
+static struct platform_driver rda_cpufreq_hw_driver = {
+	.probe = rda_cpufreq_hw_driver_probe,
+	.remove = rda_cpufreq_hw_driver_remove,
+	.driver = {
+		.name = "rda-cpufreq-hw",
+		.of_match_table = rda_cpufreq_hw_match,
+	},
+};
+
+static int __init rda_cpufreq_hw_init(void)
+{
+	// ap <---> modem temperature controll
+	cpu_msys_dev = rda_msys_alloc_device();
+	
+	if (!cpu_msys_dev) {
+		return -EINVAL;;
+	}
+	
+	
+	cpu_msys_dev->module = SYS_PM_MOD;
+	cpu_msys_dev->name = "rda-cpu-freq";
+	cpu_msys_dev->notifier.notifier_call = rda_set_cpufreq_max;
+	rda_msys_register_device(cpu_msys_dev);
+	rda_cpu_freq_init_sysfs();
+	
+	return platform_driver_register(&rda_cpufreq_hw_driver);
+
+}
+
+static void __exit rda_cpufreq_hw_exit(void)
 {
 	rda_msys_unregister_device(cpu_msys_dev);
 	rda_msys_free_device(cpu_msys_dev);
-	cpufreq_unregister_driver(&rda_cpufreq_driver);
+	
+	platform_driver_unregister(&rda_cpufreq_hw_driver);
 }
+
+
+
+module_init(rda_cpufreq_hw_init);
+module_exit(rda_cpufreq_hw_exit);
 
 MODULE_AUTHOR("Yingchun Li <yingchunli@rdamicro.com>");
 MODULE_DESCRIPTION("cpufreq driver for RDA SoCs");
 MODULE_LICENSE("GPL");
-module_init(rda_cpufreq_init);
-module_exit(rda_cpufreq_exit);

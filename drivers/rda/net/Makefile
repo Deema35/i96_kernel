@@ -20,3 +20,5 @@ subdir-ccflags-$(CONFIG_RDAWDBG)  += -DDEBUG -Werror
 
 obj-$(CONFIG_RDAWFMAC) += rdawlan/
 obj-$(CONFIG_RDACBDEV) 	+= rdacombodev/
+
+obj-$(CONFIG_RDA_RMNET) += rmnet.o

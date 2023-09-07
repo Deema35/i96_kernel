@@ -10,7 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+ #include <linux/of.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -21,12 +21,14 @@
 #include <asm/system_misc.h>
 #include <asm/io.h>
 
-#include <plat/md_sys.h>
-#include <plat/reg_md_sysctrl.h>
-#include <plat/boot_mode.h>
-#include <mach/regulator.h>
+#include <rda/plat/md_sys.h>
+#include <rda/plat/reg_md_sysctrl.h>
+#include <rda/plat/boot_mode.h>
+#include <rda/mach/regulator.h>
+
 
 #include "regulator-devices.h"
+
 
 #ifndef CONFIG_RDA_FPGA
 
@@ -238,6 +240,7 @@ static int rda_regulator_get_voltage_sel(struct regulator_dev *rdev)
 
 	for (i = 0; i < tsize; i++) {
 		if (table[i] == rda_reg->cur_val) {
+			printk(KERN_ERR "<rda-regulator> : voltage_sel = %d\n", i);
 			return i;
 		}
 	}
@@ -337,84 +340,168 @@ static struct regulator_ops rda_regulator_ops = {
 	.get_mode		= rda_regulator_get_mode,
 	.set_current_limit	= rda_regulator_set_current_limit,
 	.get_current_limit	= rda_regulator_get_current_limit,
+	
+	.set_voltage = NULL,
+	.map_voltage = NULL,
+	.get_voltage = NULL,
+	.set_input_current_limit = NULL,
+	.set_over_current_protection = NULL,
+	.set_active_discharge = NULL,
+	.enable_time = NULL,
+	.set_ramp_delay = NULL,
+	.set_voltage_time_sel = NULL,
+	.set_soft_start = NULL,
+	.get_status = NULL,
+	.get_optimum_mode = NULL,
+	.set_load = NULL,
+	.set_bypass = NULL,
+	.get_bypass = NULL,
+	.set_suspend_voltage = NULL,
+	.set_suspend_enable = NULL,
+	.set_suspend_disable = NULL,
+	.set_suspend_mode = NULL,
+	.set_pull_down = NULL,
 };
 
-/* standard regulator_desc define*/
-#define RDA_REGULATOR_DESC(_id_, _name_, _type_) \
-	[(_id_)] = { \
-		.name	= (_name_), \
-		.id		= (_id_), \
-		.ops		= &rda_regulator_ops, \
-		.type		= _type_, \
-		.owner	= THIS_MODULE, \
+
+
+static u32 GetDeviceTreeProperty(struct platform_device *pdev, const char *PropertyName)
+{
+	const void *ptr;
+	
+	ptr = of_get_property(pdev->dev.of_node, PropertyName, NULL);
+
+	if (!ptr) dev_info(&pdev->dev,"Can't read %s", PropertyName);
+	
+	return be32_to_cpup(ptr);
+    
+}
+
+static void GetDeviceTreeStringProperty(struct platform_device *pdev, char *StringContainer, const char *PropertyName)
+{
+	const void *ptr;
+	
+	ptr = of_get_property(pdev->dev.of_node, PropertyName, NULL);
+
+	if (!ptr)
+	{
+		dev_info(&pdev->dev,"Can't read %s", PropertyName);
+		return;
 	}
+	
+	strcpy (StringContainer, (char *)ptr);
+    
+}
 
-static struct regulator_desc rda_regs_desc[] = {
-	RDA_REGULATOR_DESC (rda_ldo_cam, LDO_CAM, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_usb, LDO_USB, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_sdmmc, LDO_SDMMC, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_fm, LDO_FM, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_bt, LDO_BT, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_lcd, LDO_LCD, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_cam_flash, LDO_CAM_FLASH, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_i2c, LDO_I2C, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_keypad, LDO_KEYPAD, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_backlight, LDO_BACKLIGHT, REGULATOR_CURRENT),
-	RDA_REGULATOR_DESC (rda_ldo_ledr, LDO_LEDR, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_ledg, LDO_LEDG, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_ledb, LDO_LEDB, REGULATOR_VOLTAGE),
-	RDA_REGULATOR_DESC (rda_ldo_vibrator, LDO_VIBRATOR, REGULATOR_VOLTAGE),
-};
 
+
+	
+	
+	
 
 /* standard regulator driver for system mount*/
 static int rda_regulator_probe(struct platform_device *pdev)
 {
-	struct rda_reg_config *rda_cfg = (struct rda_reg_config *)pdev->dev.platform_data;
-	struct regulator_config config = { };
-	struct regulator_init_data *init_data = rda_cfg->init_data;
+	struct regulator_desc *rda_regs_desc = NULL; 
 	struct rda_regulator *rda_reg = NULL;
+	struct rda_reg_config *rda_config = NULL;
+	struct regulator_init_data *init_data = NULL;
+	char *suply_name = NULL;
+	
+	struct regulator_consumer_supply *consumer_supply = NULL;
+	struct rda_reg_def *reg_default = NULL;
+	struct regulator_config *config = NULL;
+	
+	int *vtable = NULL;
 	int ret = 0;
-
-	pr_debug("<rda-regulator> : probe : id=%d\n", pdev->id);
-
+	
+	
+	
 	rda_reg = kzalloc(sizeof(struct rda_regulator), GFP_KERNEL);
-	if (!rda_reg) {
+	rda_config = kzalloc(sizeof(struct rda_reg_config), GFP_KERNEL);
+	init_data = kzalloc(sizeof(struct regulator_init_data), GFP_KERNEL);
+	rda_regs_desc = kzalloc(sizeof(struct regulator_desc), GFP_KERNEL);
+	
+	consumer_supply = kzalloc(sizeof(struct regulator_consumer_supply), GFP_KERNEL);
+	reg_default = kzalloc(sizeof(struct rda_reg_def), GFP_KERNEL);
+	config = kzalloc(sizeof(struct regulator_config), GFP_KERNEL);
+	
+	suply_name = kzalloc(sizeof(char) * 15, GFP_KERNEL);
+	vtable = kzalloc(sizeof(int) * 2, GFP_KERNEL);
+	
+	if (!rda_reg || !rda_config || !init_data || !rda_regs_desc || !suply_name) {
 		dev_err(&pdev->dev, "Unable to allocate private data\n");
 		return -ENOMEM;
 	}
-
-	rda_reg->config = rda_cfg;
+	
+	rda_regs_desc->id = GetDeviceTreeProperty(pdev, "id");
+	GetDeviceTreeStringProperty(pdev, suply_name, "suply_consumer_name");
+	rda_regs_desc->name = suply_name;
+	rda_regs_desc->supply_name = suply_name;
+	rda_regs_desc->ops = &rda_regulator_ops;
+	rda_regs_desc->type	= REGULATOR_VOLTAGE;
+	rda_regs_desc->owner= THIS_MODULE;
+	rda_regs_desc->regulators_node = NULL;
+	rda_regs_desc->of_match = NULL;
+	rda_regs_desc->poll_enabled_time = false;
+	
+	pdev->id = rda_regs_desc->id;
+	
+	vtable[0] = GetDeviceTreeProperty(pdev, "regulator-min-microvolt");
+	vtable[1] = GetDeviceTreeProperty(pdev, "regulator-max-microvolt");
+	
+	consumer_supply->supply = rda_regs_desc->name;
+	
+	
+	reg_default->def_val = GetDeviceTreeProperty(pdev, "def_val");
+	rda_reg->config = rda_config;
+	rda_reg->config->pm_id = GetDeviceTreeProperty(pdev, "pm_id");
+	rda_reg->config->msys_cmd = GetDeviceTreeProperty(pdev, "msys_cmd");
+	rda_reg->config->table = (void *)vtable;
+	rda_reg->config->tsize = 2;
+	
+	init_data->constraints.name = rda_regs_desc->name;
+	init_data->constraints.min_uV = vtable[0];
+	init_data->constraints.max_uV = vtable[1];
+	init_data->constraints.min_uA = 0;
+	init_data->constraints.max_uA = 0;
+	init_data->constraints.valid_modes_mask = GetDeviceTreeProperty(pdev, "valid_modes_mask");
+	init_data->constraints.valid_ops_mask = GetDeviceTreeProperty(pdev, "valid_ops_mask");
+	init_data->consumer_supplies = consumer_supply;
+	init_data->num_consumer_supplies = 1;
+	init_data->regulator_init = rda_regulator_do_init;
+	init_data->driver_data = reg_default;
+	init_data->supply_regulator = NULL;
+	
+	
+	rda_reg->config->init_data = init_data;
+	
 	rda_reg->private = (void *)pdev;
 
-	if (pdev->id < 0 || pdev->id >= ARRAY_SIZE(rda_regs_desc)) {
-		ret = -EINVAL;
-		dev_err(&pdev->dev, "Invalid identify!\n");
-		goto out;
-	}
+	
 	/* Set the size of items. */
-	rda_regs_desc[pdev->id].n_voltages = rda_cfg->tsize;
+	rda_regs_desc->n_voltages = rda_reg->config->tsize;
 
 	rda_reg->msys_dev = rda_msys_alloc_device();
 	if (!rda_reg->msys_dev) {
 		ret = -EINVAL;
 		goto out;
 	}
-
+	
 	rda_reg->msys_dev->module = SYS_PM_MOD;
-	rda_reg->msys_dev->name = rda_regs_desc[pdev->id].name;
+	rda_reg->msys_dev->name = rda_regs_desc->name;
 	rda_msys_register_device(rda_reg->msys_dev);
-
-	config.dev = &pdev->dev;
-	config.driver_data = rda_reg;
-	config.init_data = init_data;
-	rda_reg->rdev = regulator_register(&rda_regs_desc[pdev->id],&config);
+	
+	config->dev = &pdev->dev;
+	config->of_node = pdev->dev.of_node;
+	config->driver_data = rda_reg;
+	config->init_data = rda_reg->config->init_data;
+	rda_reg->rdev = devm_regulator_register(&pdev->dev, rda_regs_desc,config);
 	if (IS_ERR(rda_reg->rdev)) {
 		ret = PTR_ERR(rda_reg->rdev);
 		dev_err(&pdev->dev, "Failed to register withe regulator!\n");
 		goto out;
 	}
-
 	platform_set_drvdata(pdev, rda_reg);
 
 	return 0;
@@ -428,7 +515,38 @@ out:
 	if (rda_reg) {
 		kfree(rda_reg);
 	}
-
+	if (rda_config) {
+		kfree(rda_config);
+	}
+	
+	if (init_data) {
+		kfree(init_data);
+	}
+	
+	if (rda_regs_desc) {
+		kfree(rda_regs_desc);
+	}
+	
+	if (consumer_supply) {
+		kfree(consumer_supply);
+	}
+	
+	if (reg_default) {
+		kfree(reg_default);
+	}
+	
+	if (config) {
+		kfree(config);
+	}
+	
+	if (suply_name) {
+		kfree(suply_name);
+	}
+	
+	if (vtable) {
+		kfree(vtable);
+	}
+	
 	return ret;
 }
 
@@ -456,13 +574,21 @@ static int __exit rda_regulator_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id rda_regulator_matches[] = {
+	{ .compatible = "rda,8810pl-regulator" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, rda_regulator_matches);
+
 static struct platform_driver rda_regulator_driver = {
 	.driver = {
 		.name	= "regulator-rda",
 		.owner	= THIS_MODULE,
+		.of_match_table = rda_regulator_matches,
 	},
 	.probe	= rda_regulator_probe,
 	.remove	= rda_regulator_remove,
+	
 };
 
 static int __init rda_regulator_init(void)
@@ -510,53 +636,10 @@ static void rda_pm_power_off(void)
 	return;
 }
 
-static void rda_pm_restart(char mode, const char *cmd)
-{
-	struct client_cmd cmd_set;
-	struct rda_pm_param param;
-	unsigned int ret;
-	HWP_SYS_CTRL_T *pctrl = (HWP_SYS_CTRL_T *)rda_sysctrl;
-
-	rda_set_boot_mode(cmd);
-
-	/* Power-off backlight firstly. */
-	memset(&cmd_set, 0, sizeof(cmd_set));
-	cmd_set.pmsys_dev = rda_power_ctrl.msys_dev;
-	cmd_set.mod_id = SYS_PM_MOD;
-	cmd_set.mesg_id = SYS_PM_CMD_SET_LEVEL;
-
-	param.pm_id = 2;
-	param.pm_val = 0;
-
-	cmd_set.pdata = (void *)&param;
-	cmd_set.data_size = sizeof(param);
-
-	ret = rda_msys_send_cmd(&cmd_set);
-	if (ret > 0) {
-		/* Just print a warning and continue to reboot. */
-		pr_warning("<rda-reg> : Failure as setting backlight!\n");
-	}
-
-	memset(&cmd_set, 0, sizeof(cmd_set));
-	cmd_set.pmsys_dev = rda_power_ctrl.msys_dev;
-	cmd_set.mod_id = SYS_GEN_MOD;
-	cmd_set.mesg_id = SYS_GEN_CMD_RESET;
-
-	rda_msys_send_cmd_timeout(&cmd_set, 6000);
-
-	/* Try to reboot by accessing modem registers directly */
-	for (;;) {
-		pctrl->REG_DBG = SYS_CTRL_PROTECT_UNLOCK;
-		pctrl->Sys_Rst_Set= SYS_CTRL_SOFT_RST;
-	}
-
-	return;
-}
-
 void rda_init_shdw(void)
 {
 	pm_power_off = rda_pm_power_off;
-	arm_pm_restart = rda_pm_restart;
+	//arm_pm_restart = rda_pm_restart;
 
 	return;
 }

@@ -19,18 +19,18 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <asm/io.h>
-#include <plat/reg_sysctrl.h>
-#include <plat/reg_aif.h>
-#include <plat/reg_comregs.h>
-#include <plat/reg_ap_irq.h>
-#include <plat/ap_clk.h>
-#include <plat/rda_debug.h>
-#include <plat/md_sys.h>
-#include <plat/cpufreq.h>
-#include <plat/ispi.h>
+#include <rda/plat/reg_sysctrl.h>
+#include <rda/plat/reg_aif.h>
+#include <rda/plat/reg_comregs.h>
+#include <rda/plat/reg_ap_irq.h>
+#include "ap_clk.h"
+#include <rda/plat/md_sys.h>
+#include <rda/plat/cpufreq.h>
+#include <rda/plat/ispi.h>
 #include <linux/module.h>
 #include <rda/tgt_ap_clock_config.h>
 #include <linux/irqchip/arm-gic.h>
+#include <linux/platform_device.h>
 
 #define COMREGS_SLEEP_CTRL	(1<<3)
 #define COMREGS_EXCEPTION_CTRL	(1<<4)
@@ -408,10 +408,9 @@ void apsys_enable_bus_clk(int on)
 {
 	u32 val;
 
-	if (!rda_bus_gating)
-		return;
+	
 
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 
 	iowrite32(AP_CTRL_PROTECT_UNLOCK, &hwp_apSysCtrl->REG_DBG);
 
@@ -445,7 +444,7 @@ void apsys_enable_usb_clk(int on)
 {
 }
 #else
-#include <plat/cpu.h>
+#include <rda/plat/cpu.h>
 void apsys_enable_usb_clk(int on)
 {
 	u32 val = 0;
@@ -453,7 +452,7 @@ void apsys_enable_usb_clk(int on)
 	u32 locked;
 	int cnt = 10;
 	u16 metal_id = rda_get_soc_metal_id();
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 
 	iowrite32(AP_CTRL_PROTECT_UNLOCK, &hwp_apSysCtrl->REG_DBG);
 
@@ -469,7 +468,7 @@ void apsys_enable_usb_clk(int on)
 		iowrite32(val, &hwp_apSysCtrl->Cfg_Pll_Ctrl[AP_USB_CLK_IDX]);
 		mask = SYS_CTRL_AP_PLL_LOCKED_USB_MASK;
 		locked = SYS_CTRL_AP_PLL_LOCKED_USB_LOCKED;
-		while (((hwp_sysCtrlAp->Sel_Clock & mask) != locked) && cnt) {
+		while (((hwp_apSysCtrl->Sel_Clock & mask) != locked) && cnt) {
 			mdelay(1);
 			cnt--;
 		}
@@ -492,7 +491,7 @@ void apsys_enable_usb_clk(int on)
 
 void apsys_enable_gouda_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on) {
 		iowrite32(SYS_CTRL_AP_ENABLE_GCG_GOUDA,
 				&hwp_apSysCtrl->Clk_GCG_Enable);
@@ -504,7 +503,7 @@ void apsys_enable_gouda_clk(int on)
 
 void apsys_enable_dsi_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on) {
 		ispi_reg_write(0xA2,0x20B);
 		udelay(100);
@@ -520,7 +519,7 @@ void apsys_enable_dsi_clk(int on)
 
 void apsys_enable_dpi_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on) {
 		iowrite32(SYS_CTRL_AP_ENABLE_GCG_DPI,
 				&hwp_apSysCtrl->Clk_GCG_Enable);
@@ -532,7 +531,7 @@ void apsys_enable_dpi_clk(int on)
 
 void apsys_enable_camera_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_GCG_CAMERA,
 				&hwp_apSysCtrl->Clk_GCG_Enable);
@@ -543,7 +542,7 @@ void apsys_enable_camera_clk(int on)
 
 void apsys_enable_gpu_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on) {
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_GPU,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -563,7 +562,7 @@ void apsys_enable_gpu_clk(int on)
 
 void apsys_enable_vpu_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on) {
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_VPU,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -583,7 +582,7 @@ void apsys_enable_vpu_clk(int on)
 
 void apsys_enable_voc_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_VOC
 				| SYS_CTRL_AP_ENABLE_APOC_VOC_CORE
@@ -598,7 +597,7 @@ void apsys_enable_voc_clk(int on)
 
 void apsys_enable_spiflash_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_SPIFLASH,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -609,7 +608,7 @@ void apsys_enable_spiflash_clk(int on)
 
 void apsys_enable_uart1_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_UART1,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -620,7 +619,7 @@ void apsys_enable_uart1_clk(int on)
 
 void apsys_enable_uart2_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_UART2,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -631,7 +630,7 @@ void apsys_enable_uart2_clk(int on)
 
 void apsys_enable_uart3_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_UART3,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -642,7 +641,7 @@ void apsys_enable_uart3_clk(int on)
 
 void apsys_enable_bck_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_BCK,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -653,7 +652,7 @@ void apsys_enable_bck_clk(int on)
 
 void apsys_enable_csi_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_CSI,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -664,7 +663,7 @@ void apsys_enable_csi_clk(int on)
 
 void apsys_enable_debug_clk(int on)
 {
-	rda_dbg_clk("%s %s\n", __func__, on?"on":"off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on?"on":"off");
 	if (on)
 		iowrite32(SYS_CTRL_AP_ENABLE_APOC_PDGB,
 				&hwp_apSysCtrl->Clk_APO_Enable);
@@ -680,7 +679,7 @@ void apsys_enable_clk_out(int on)
 	struct low_freq_clk_param clk_param;
 	unsigned int ret = 0;
 
-	rda_dbg_clk("%s %s\n", __func__, on ? "on" : "off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on ? "on" : "off");
 
 	memset(&cmd_set, 0, sizeof(cmd_set));
 
@@ -707,7 +706,7 @@ void apsys_enable_aux_clk(int on)
 	struct low_freq_clk_param clk_param;
 	unsigned int ret = 0;
 
-	rda_dbg_clk("%s %s\n", __func__, on ? "on" : "off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on ? "on" : "off");
 
 	memset(&cmd_set, 0, sizeof(cmd_set));
 
@@ -734,7 +733,7 @@ void apsys_enable_clk_32k(int on)
 	struct low_freq_clk_param clk_param;
 	unsigned int ret = 0;
 
-	rda_dbg_clk("%s %s\n", __func__, on ? "on" : "off");
+	printk(KERN_DEBUG "%s %s\n", __func__, on ? "on" : "off");
 
 	memset(&cmd_set, 0, sizeof(cmd_set));
 
@@ -772,11 +771,10 @@ unsigned long apsys_get_cpu_clk_rate(void)
 {
 	register u32 reg;
 	unsigned long rate;
-
 	reg = ioread32(&hwp_apSysCtrl->Cfg_Clk_AP_CPU);
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_CPU_FREQ);
 	rate = apsys_cal_freq_by_divreg(rda_ap_pll_current_freq, reg, 0);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -784,7 +782,7 @@ unsigned long apsys_get_bus_clk_rate(void)
 {
 	unsigned long rate = pll_bus_freq;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -798,7 +796,7 @@ unsigned long apsys_get_axi_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_AXI_SRC_SEL;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_AXI_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -812,7 +810,7 @@ unsigned long apsys_get_ahb1_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_AHB1_SRC_SEL;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_AHB1_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -826,7 +824,7 @@ unsigned long apsys_get_apb1_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_APB1_SRC_SEL;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_APB1_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -840,7 +838,7 @@ unsigned long apsys_get_apb2_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_APB2_SRC_SEL;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_APB2_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -854,7 +852,7 @@ unsigned long apsys_get_gcg_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_GCG_SRC_SEL;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_GCG_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -868,7 +866,7 @@ unsigned long apsys_get_gpu_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_GPU_SRC_DIV2;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_GPU_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -882,7 +880,7 @@ unsigned long apsys_get_vpu_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_VPU_SRC_DIV2;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_VPU_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -896,7 +894,7 @@ unsigned long apsys_get_voc_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_VOC_SRC_DIV2;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_VOC_FREQ);
 	rate = apsys_cal_freq_by_divreg(pll_bus_freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -911,7 +909,7 @@ unsigned long apsys_get_spiflash_clk_rate(void)
 	div2 = reg & SYS_CTRL_AP_AP_SFLSH_SRC_DIV2;
 	reg = GET_BITFIELD(reg, SYS_CTRL_AP_AP_SFLSH_FREQ);
 	rate = apsys_cal_freq_by_divreg(ahb1freq, reg, div2);
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -940,7 +938,7 @@ unsigned long apsys_get_uart_clk_rate(unsigned int id)
 		divmode = 4;
 	rate = clksrc / divmode / (div + 2);
 
-	rda_dbg_clk("%s %d %ld\n", __func__, id, rate);
+	printk(KERN_DEBUG "%s %d %ld\n", __func__, id, rate);
 	return rate;
 }
 
@@ -959,7 +957,7 @@ unsigned long apsys_get_bck_clk_rate(void)
 		rate = 0;
 	}
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -978,7 +976,7 @@ unsigned long apsys_get_mem_clk_rate(void)
 			SYS_CTRL_AP_AP_MEM_SRC_DIV2) ? 1 : 0;
 	rate = PLL_MEM_FREQ >> (2 + div2);
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	return rate;
 }
 
@@ -991,7 +989,7 @@ void apsys_set_cpu_clk_rate(unsigned long rate)
 {
 	register u32 reg = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_CPU_FREQ(
 			apsys_get_divreg(rda_ap_pll_current_freq, rate, NULL));
 	iowrite32(reg, &hwp_apSysCtrl->Cfg_Clk_AP_CPU);
@@ -1037,7 +1035,7 @@ void apsys_set_bus_clk_rate(unsigned long rate)
 	mdelay(1);
 	ispi_reg_write(PLL_REG_BUS_BASE + PLL_REG_OFFSET_07H, 0x0013);
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	pll_bus_freq = rate;
 #endif
 }
@@ -1052,7 +1050,7 @@ void apsys_set_axi_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_AXI_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1065,7 +1063,7 @@ void apsys_set_ahb1_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_AHB1_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1078,7 +1076,7 @@ void apsys_set_apb1_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_APB1_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1091,7 +1089,7 @@ void apsys_set_apb2_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_APB2_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1104,7 +1102,7 @@ void apsys_set_gcg_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_GCG_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1117,7 +1115,7 @@ void apsys_set_gpu_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_GPU_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1130,7 +1128,7 @@ void apsys_set_vpu_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_VPU_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1143,7 +1141,7 @@ void apsys_set_voc_clk_rate(unsigned long rate)
 	register u32 reg = 0;
 	u32 div2 = 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_VOC_FREQ(
 			apsys_get_divreg(pll_bus_freq, rate, &div2));
 	if (div2)
@@ -1157,7 +1155,7 @@ void apsys_set_spiflash_clk_rate(unsigned long rate)
 	u32 div2 = 0;
 	u32 ahb1freq = apsys_get_ahb1_clk_rate();
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	reg = SYS_CTRL_AP_AP_SFLSH_FREQ(
 			apsys_get_divreg(ahb1freq, rate, &div2));
 	if (div2)
@@ -1171,7 +1169,7 @@ void apsys_set_uart_clk_rate(unsigned int id, unsigned long rate)
 	u32 divmode;
 	u32 div;
 
-	rda_dbg_clk("%s %d %ld\n", __func__, id, rate);
+	printk(KERN_DEBUG "%s %d %ld\n", __func__, id, rate);
 	if (id > 2) {
 		pr_warn("Invalid uart ID: %u\n", id);
 		return;
@@ -1216,7 +1214,7 @@ void apsys_set_bck_clk_rate(unsigned long rate)
 	u32 reg = AIF_BCK_PLL_SOURCE_PLL_150M
 		| AIF_BCK_POL_NORMAL | AIF_AUDIOBCK_DIVIDER(div);
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	iowrite32(reg, &hwp_apAif->Cfg_Clk_AudioBCK);
 }
 
@@ -1231,7 +1229,7 @@ void apsys_set_mem_clk_rate(unsigned long rate)
 	u32 thresh = ((PLL_MEM_FREQ >> 3) + (PLL_MEM_FREQ >> 2)) >> 1;
 	u32 reg = (rate < thresh) ?  SYS_CTRL_AP_AP_MEM_SRC_DIV2 : 0;
 
-	rda_dbg_clk("%s %ld\n", __func__, rate);
+	printk(KERN_DEBUG "%s %ld\n", __func__, rate);
 	iowrite32(reg, &hwp_apSysCtrl->Cfg_Clk_AP_MEM);
 }
 
@@ -1264,7 +1262,7 @@ void apsys_set_dsi_clk_rate(unsigned long rate)
 
 void apsys_reset_usbc(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->AHB1_Rst_Set = SYS_CTRL_AP_SET_AHB1_RST_USBC;
 	udelay(1000);
 	hwp_apSysCtrl->AHB1_Rst_Clr = SYS_CTRL_AP_CLR_AHB1_RST_USBC;
@@ -1272,7 +1270,7 @@ void apsys_reset_usbc(void)
 
 void apsys_reset_vpu(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->AXI_Rst_Set = SYS_CTRL_AP_AXI_RST_CLR_VPU;
 	mdelay(1);
 	hwp_apSysCtrl->AXI_Rst_Clr = SYS_CTRL_AP_AXI_RST_CLR_VPU;
@@ -1288,7 +1286,7 @@ EXPORT_SYMBOL(apsys_reset_vpu);
 
 void apsys_reset_axi_vpu(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->AXI_Rst_Set = SYS_CTRL_AP_AXI_RST_CLR_VPU;
 	mdelay(1);
 	hwp_apSysCtrl->AXI_Rst_Clr = SYS_CTRL_AP_AXI_RST_CLR_VPU;
@@ -1299,7 +1297,7 @@ EXPORT_SYMBOL(apsys_reset_axi_vpu);
 
 void apsys_reset_axi_set_vpu(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->AXI_Rst_Set = SYS_CTRL_AP_AXI_RST_CLR_VPU;
 	mdelay(1);
 }
@@ -1308,7 +1306,7 @@ EXPORT_SYMBOL(apsys_reset_axi_set_vpu);
 
 void apsys_reset_axi_clr_vpu(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->AXI_Rst_Clr = SYS_CTRL_AP_AXI_RST_CLR_VPU;
 	mdelay(1);
 }
@@ -1317,7 +1315,7 @@ EXPORT_SYMBOL(apsys_reset_axi_clr_vpu);
 
 void apsys_reset_voc(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 		hwp_apSysCtrl->AXI_Rst_Set = SYS_CTRL_AP_SET_AXI_RST_VOC;
 	mdelay(1);
 		hwp_apSysCtrl->AXI_Rst_Clr = SYS_CTRL_AP_CLR_AXI_RST_VOC;
@@ -1329,7 +1327,7 @@ EXPORT_SYMBOL(apsys_reset_voc);
 unsigned int apsys_get_reset_set_voc(void)
 {
 	register u32 reg;
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	reg = ioread32(&hwp_apSysCtrl->AXI_Rst_Set);
 	mdelay(1);
 	return (unsigned int)(reg & SYS_CTRL_AP_SET_AXI_RST_VOC);
@@ -1339,7 +1337,7 @@ EXPORT_SYMBOL(apsys_get_reset_set_voc);
 
 void apsys_reset_set_voc(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 		hwp_apSysCtrl->AXI_Rst_Set = SYS_CTRL_AP_SET_AXI_RST_VOC;
 	mdelay(1);
 }
@@ -1348,7 +1346,7 @@ EXPORT_SYMBOL(apsys_reset_set_voc);
 
 void apsys_reset_clr_voc(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 		hwp_apSysCtrl->AXI_Rst_Clr = SYS_CTRL_AP_CLR_AXI_RST_VOC;
 	mdelay(1);
 }
@@ -1357,7 +1355,7 @@ EXPORT_SYMBOL(apsys_reset_clr_voc);
 
 void apsys_reset_gouda(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->GCG_Rst_Set= SYS_CTRL_AP_GCG_RST_CLR_GOUDA;
 	mdelay(1);
 	hwp_apSysCtrl->GCG_Rst_Clr= SYS_CTRL_AP_GCG_RST_CLR_GOUDA;
@@ -1368,7 +1366,7 @@ EXPORT_SYMBOL(apsys_reset_gouda);
 
 void apsys_reset_lcdc(void)
 {
-	rda_dbg_clk("%s\n", __func__);
+	printk(KERN_DEBUG "%s\n", __func__);
 	hwp_apSysCtrl->GCG_Rst_Set= SYS_CTRL_AP_GCG_RST_CLR_LCDC;
 	udelay(1);
 	hwp_apSysCtrl->GCG_Rst_Clr= SYS_CTRL_AP_GCG_RST_CLR_LCDC;
@@ -1380,7 +1378,7 @@ void apsys_reset_cpu(int core)
 {
 	hwp_apSysCtrl = ((HWP_SYS_CTRL_AP_T*)IO_ADDRESS(RDA_SYSCTRL_BASE));
 
-	rda_dbg_clk("%s, core %d\n", __func__, core);
+	printk(KERN_DEBUG "%s, core %d\n", __func__, core);
 	hwp_apSysCtrl->CPU_Rst_Set= (1 << core);
 	mdelay(1);
 	hwp_apSysCtrl->CPU_Rst_Clr= (1 << core);
@@ -1559,12 +1557,76 @@ void apsys_cpupll_switch(int on)
 	}
 }
 
-int __init rda_apsys_init(void)
+int  rda_apsys_init(struct platform_device *pdev)
 {
-	hwp_apSysCtrl = ((HWP_SYS_CTRL_AP_T*)IO_ADDRESS(RDA_SYSCTRL_BASE));
-	hwp_apAif = ((HWP_AIF_T*)IO_ADDRESS(RDA_AIF_BASE));
-	hwp_apComregs = ((HWP_COMREGS_T*)IO_ADDRESS(RDA_COMREGS_BASE));
-	hwp_apIrq = ((HWP_AP_IRQ_T*)IO_ADDRESS(RDA_INTC_BASE));
+	struct resource *res;
+	
+	//hwp_apSysCtrl.....................
+	
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	
+	if (res == NULL) {
+		dev_err(&pdev->dev, "Can't get resurs 0.\n");
+		return -ENXIO;
+	}
+	
+	hwp_apSysCtrl = ioremap(res->start, resource_size(res));
+	
+	if (!hwp_apSysCtrl) {
+		dev_err(&pdev->dev, "hwp_apSysCtrl fail\n");
+		return -ENOMEM;
+	}
+	//hwp_apAif...............................
+	
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	
+	if (res == NULL) {
+		dev_err(&pdev->dev, "Can't get resurs 1.\n");
+		return -ENXIO;
+	}
+	
+	hwp_apAif = ioremap(res->start, resource_size(res));
+	
+	if (!hwp_apAif) {
+		dev_err(&pdev->dev, "hwp_apAif fail\n");
+		return -ENOMEM;
+	}
+	
+	
+	//hwp_apComregs.....................
+	
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
+	
+	if (res == NULL) {
+		dev_err(&pdev->dev, "Can't get resurs 2.\n");
+		return -ENXIO;
+	}
+	
+	hwp_apComregs = ioremap(res->start, resource_size(res));
+	
+	if (!hwp_apComregs) {
+		dev_err(&pdev->dev, "hwp_apComregs fail\n");
+		return -ENOMEM;
+	}
+	
+	
+	//hwp_apIrq.....................
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 3);
+	
+	if (res == NULL) {
+		dev_err(&pdev->dev, "Can't get resurs 3.\n");
+		return -ENXIO;
+	}
+	
+	hwp_apIrq = ioremap(res->start, resource_size(res));
+	
+	if (!hwp_apIrq) {
+		dev_err(&pdev->dev, "hwp_apIrq fail\n");
+		return -ENOMEM;
+	}
+	
+	
+	
 
 	return 0;
 }

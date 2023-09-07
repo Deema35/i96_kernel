@@ -27,4 +27,8 @@ $(MODULEPFX)-objs := \
 	rda_5991_power_ctrl.o  \
 	rda_5991e_power_ctrl.o \
 	rda_5991f_power_ctrl.o \
-	rda_5991g_power_ctrl.o
+	rda_5991g_power_ctrl.o \
+	rda_bt_core.o \
+	rda_bt_rf.o \
+	rda_wifi_core.o \
+	rda_wifi_rf.o

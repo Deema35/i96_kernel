@@ -10,12 +10,12 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
-#include <mach/regulator.h>
-#include <mach/hardware.h>
-#include <mach/rda_clk_name.h>
-#include <plat/devices.h>
-#include <plat/rda_debug.h>
-#include <plat/reg_i2c.h>
+#include <rda/mach/regulator.h>
+#include <rda/mach/hardware.h>
+#include <rda/mach/rda_clk_name.h>
+#include <rda/plat/devices.h>
+#include <rda/plat/rda_debug.h>
+#include <rda/plat/reg_i2c.h>
 
 #define HAL_I2C_OPERATE_TIME         (200)
 
@@ -218,8 +218,7 @@ int rda_i2c_send_bytes(struct rda_i2c_dev *dev,u8 addr, u8 *data, int len,bool s
 	//timerout = jiffies;
 	if (len < 1)
 		return -1;
-	rda_dbg_i2c("%s, addr =0x%x , len =%d ,stop =%d\n",
-			__func__, addr, len, stop);
+	//rda_dbg_i2c("%s, addr =0x%x , len =%d ,stop =%d\n", __func__, addr, len, stop);
 	ret = hal_i2c_raw_send_byte(dev,(addr << 1) & 0xFE, 1, 0);
 	if (ret) {
 		//dev_err(dev->dev, "%s, send addr fail, addr = 0x%02x\n",
@@ -252,8 +251,7 @@ int rda_i2c_get_bytes(struct rda_i2c_dev *dev,u8 addr, u8 *data, int len,bool st
 
 	if (len < 1)
 		return -1;
-	rda_dbg_i2c("%s, addr =0x%x , len =%d ,stop =%d\n",
-			__func__, addr, len, stop);
+	//rda_dbg_i2c("%s, addr =0x%x , len =%d ,stop =%d\n", __func__, addr, len, stop);
 	ret = hal_i2c_raw_send_byte(dev,(addr << 1) | 0x01, 1, 0);
 	if (ret) {
 		//dev_err(dev->dev, "%s, send addr fail, addr = 0x%02x\n",
@@ -335,10 +333,9 @@ rda_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	return r;
 }
 
-static u32
-rda_i2c_func(struct i2c_adapter *adap)
+static u32 rda_i2c_func(struct i2c_adapter *adap)
 {
-	rda_dbg_i2c("rda_i2c_func\n");
+	//rda_dbg_i2c("rda_i2c_func\n");
 	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
 }
 
@@ -347,15 +344,25 @@ static const struct i2c_algorithm rda_i2c_algo = {
 	.functionality	= rda_i2c_func,
 };
 
-static int
-rda_i2c_probe(struct platform_device *pdev)
+static u32 GetDeviceTreeProperty(struct platform_device *pdev, const char *PropertyName)
+{
+	const void *ptr;
+	
+	ptr = of_get_property(pdev->dev.of_node, PropertyName, NULL);
+
+	if (!ptr) dev_info(&pdev->dev,"Can't read %s", PropertyName);
+	
+	return be32_to_cpup(ptr);
+    
+}
+
+static int rda_i2c_probe(struct platform_device *pdev)
 {
 	struct rda_i2c_dev	*dev;
 	struct i2c_adapter	*adap;
 	struct resource	*mem;
 	int r = 0;
-	struct rda_i2c_device_data *pdata;
-	u32 speed = 0;
+	
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
@@ -364,55 +371,58 @@ rda_i2c_probe(struct platform_device *pdev)
 	}
 
 	dev = kzalloc(sizeof(struct rda_i2c_dev), GFP_KERNEL);
+	
 	if (!dev) {
 		dev_err(&pdev->dev, "fail to alloc rda_i2c_dev\n");
 		return -ENOMEM;
 	}
+	
+	pdev->id = GetDeviceTreeProperty(pdev, "id");
 
-	dev->i2c_regulator = regulator_get(NULL, LDO_I2C);
+	dev->i2c_regulator = regulator_get(&pdev->dev, LDO_I2C);
 
-        if (IS_ERR(dev->i2c_regulator)) {
-                dev_err(&pdev->dev,
-                        "Failed to get camera regulator\n");
+        if (IS_ERR(dev->i2c_regulator))
+			{
+                dev_err(&pdev->dev,  "Failed to get camera regulator\n");
                 goto err_free_mem;
         }
         r = regulator_enable(dev->i2c_regulator);
         if (r < 0) {
-                dev_err(&pdev->dev,
-                        "Failed to enable camera regulator\n");
+                dev_err(&pdev->dev, "Failed to enable camera regulator\n");
                 goto err_regulator;
         }
 
-	pdata = pdev->dev.platform_data;
-	if (pdata){
-		speed = pdata->speed;
-	} else
-		speed = 100;	/* Defualt speed */
+	
+	
 
-	dev->speed_khz = speed;
+	dev->speed_khz = GetDeviceTreeProperty(pdev, "clock-frequency")/1000;
 	dev->idle = 1;
 	dev->dev = &pdev->dev;
-	dev->master_clk = clk_get(NULL, RDA_CLK_APB1);
-	if (!dev->master_clk) {
+	
+	dev->master_clk = clk_get(&pdev->dev, NULL);
+	if (IS_ERR(dev->master_clk))
+	{
 		dev_err(&pdev->dev, "no handler of clock\n");
 		r = -EINVAL;
 		goto err_regulator;
 	}
 
 	dev->base = ioremap(mem->start, resource_size(mem));
-	if (!dev->base) {
+	if (!dev->base)
+	{
 		dev_err(&pdev->dev, "ioremap fail\n");
 		r = -ENOMEM;
 		goto err_put_clk;
 	}
 
-	rda_dbg_i2c("rda_i2c_probe, mem = %08x, speed = %d\n",
-		mem->start, speed);
+	
 
 	platform_set_drvdata(pdev, dev);
+	
 	dev->master_id = pdev->id;
 	
-	rda_dbg_i2c("rda_i2c_probe  I2C %d\n",dev->master_id);
+	dev_info(&pdev->dev,"rda_i2c bus Id= %d, mem = %08x, speed = %d\n",dev->master_id , mem->start, dev->speed_khz);
+	
 	/* reset ASAP, clearing any IRQs */
 	rda_i2c_init(dev);
 
@@ -426,6 +436,7 @@ rda_i2c_probe(struct platform_device *pdev)
 	adap->algo = &rda_i2c_algo;
 	adap->dev.parent = &pdev->dev;
 	adap->retries = 3;
+	adap->dev.of_node = pdev->dev.of_node;
 
 	/* i2c device drivers may be active on return from add_adapter() */
 	adap->nr = pdev->id;
@@ -435,8 +446,7 @@ rda_i2c_probe(struct platform_device *pdev)
 		goto err_free_all;
 	}
 
-	dev_info(dev->dev, "rda_i2c, adapter %d, bus %d, at %d kHz\n",
-		 adap->nr, pdev->id, dev->speed_khz);
+	dev_info(dev->dev, "rda_i2c, adapter %d, bus %d, at %d kHz\n", adap->nr, pdev->id, dev->speed_khz);
 	return 0;
 
 err_free_all:
@@ -472,12 +482,19 @@ rda_i2c_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id rda_i2c_dt_matches[] = {
+	{ .compatible = "rda,8810pl-i2c" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, rda_i2c_dt_matches);
+
 static struct platform_driver rda_i2c_driver = {
 	.probe		= rda_i2c_probe,
 	.remove		= rda_i2c_remove,
 	.driver		= {
 		.name	= RDA_I2C_DRV_NAME,
 		.owner	= THIS_MODULE,
+		.of_match_table = rda_i2c_dt_matches,
 	},
 };
 

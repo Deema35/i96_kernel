@@ -56,7 +56,6 @@ static s32 wland_set_core_init_patch(struct wland_private *priv,
 
 	WLAND_DBG(TRAP, TRACE, "Enter\n");
 
-	mutex_lock(&priv->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -95,7 +94,6 @@ static s32 wland_set_core_init_patch(struct wland_private *priv,
 	if (err < 0)
 		WLAND_ERR("WID Result Failed\n");
 
-	mutex_unlock(&priv->proto_block);
 
 	WLAND_DBG(TRAP, TRACE, "Done(err:%d)\n", err);
 	return err;
@@ -112,7 +110,6 @@ static s32 wland_set_core_patch(struct wland_private *priv,
 
 	WLAND_DBG(TRAP, TRACE, "Enter\n");
 
-	mutex_lock(&priv->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -153,7 +150,6 @@ static s32 wland_set_core_patch(struct wland_private *priv,
 		WLAND_ERR("WID Result Failed\n");
 	}
 
-	mutex_unlock(&priv->proto_block);
 
 	WLAND_DBG(TRAP, TRACE, "Done(ret:%d)\n", err);
 

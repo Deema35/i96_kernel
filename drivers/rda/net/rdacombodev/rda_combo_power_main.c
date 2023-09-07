@@ -21,14 +21,16 @@
 #include <linux/serial.h>
 #include <linux/platform_device.h>
 #include <linux/rfkill.h>
-#include <mach/iomap.h>
+#include <rda/mach/iomap.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/clk.h>
-#include <mach/rda_clk_name.h>
-#include <mach/board.h>
+#include <rda/mach/rda_clk_name.h>
+#include <rda/mach/board.h>
 #include <linux/regulator/consumer.h>
-#include <mach/regulator.h>
+#include <rda/mach/regulator.h>
+#include <rda/mach/gpio-rda8810.h>
+#include <rda/plat/devices.h>
 
 #include <rda/tgt_ap_board_config.h>
 #include <rda/tgt_ap_gpio_setting.h>
@@ -37,17 +39,13 @@
 #include <linux/firmware.h>
 #include <linux/vmalloc.h>
 
-static struct mutex i2c_rw_lock;
+
 static struct rfkill *wlan_rfkill = NULL;
 static struct rfkill *bt_rfkill = NULL;
-static struct platform_device *platform_device;
 static unsigned short wlan_version = 0;
-static struct wake_lock rda_combo_wake_lock;
+//static struct wake_lock rda_combo_wake_lock;
 static struct delayed_work rda_combo_sleep_worker;
-struct i2c_client *rda_wifi_core_client = NULL;
-struct i2c_client *rda_wifi_rf_client = NULL;
-struct i2c_client *rda_bt_core_client = NULL;
-struct i2c_client *rda_bt_rf_client = NULL;
+
 struct completion rda_wifi_bt_comp;
 struct regulator *combo_reg;
 
@@ -61,6 +59,8 @@ static u8 clock_mask_26m = 0;
 static u8 regulator_mask = 0;
 static struct clk *clk32k = NULL;
 static struct clk *clk26m = NULL;
+
+
 
 /*enable or disable 26m clock regulator */
 void enable_26m_regulator(u8 mask)
@@ -131,8 +131,7 @@ void disable_26m_rtc(u8 mask)
 	}
 }
 
-int i2c_write_1_addr_2_data(struct i2c_client *client, const u8 addr,
-				const u16 data)
+int i2c_write_1_addr_2_data(struct i2c_client *client, const u8 addr, const u16 data)
 {
 	unsigned char DATA[3];
 	int ret = 0;
@@ -211,21 +210,27 @@ static void wlan_read_version_from_chip(void)
 {
 	int ret;
 	u16 project_id = 0, chip_version = 0;
+	
 
 	if (wlan_version != 0 || !rda_wifi_rf_client)
 		return;
 
 	ret = i2c_write_1_addr_2_data(rda_wifi_rf_client, 0x3f, 0x0001);
+	
+	
 	if (ret)
 		goto err;
 
 	ret = i2c_read_1_addr_2_data(rda_wifi_rf_client, 0x21, &chip_version);
+	
 	if (ret)
 		goto err;
 
 	ret = i2c_read_1_addr_2_data(rda_wifi_rf_client, 0x20, &project_id);
+	
 	if (ret)
 		goto err;
+	
 
 	if (project_id == 0x5990) {
 		if (chip_version == 0x47)
@@ -266,11 +271,9 @@ struct rda_firmware rda_combo_fw_entry = {
 
 static inline void rda_combo_firmware_lock(void)
 {
-	mutex_lock(&(rda_combo_fw_entry.lock));
 }
 static inline void rda_combo_firmware_unlock(void)
 {
-	mutex_unlock(&(rda_combo_fw_entry.lock));
 }
 static inline int rda_combo_get_firmware_status(void)
 {
@@ -552,68 +555,11 @@ int rda_i2c_write_data_to_rf(struct i2c_client *client, const u16(*data)[2],
 
 u32 rda_wlan_version(void)
 {
-	if(wlan_version == 0)
-		wlan_read_version_from_chip();
+	if(wlan_version == 0) wlan_read_version_from_chip();
 	return wlan_version;
 }
 
-static int rda_wifi_rf_probe(struct i2c_client *client,
-				 const struct i2c_device_id *id)
-{
-	int result = 0;
 
-	rda_wifi_rf_client = client;
-	printk("rda_wifi_rf_probe \n");
-	return result;
-}
-
-static int rda_wifi_rf_remove(struct i2c_client *client)
-{
-	return 0;
-}
-
-static int rda_wifi_rf_detect(struct i2c_client *client,
-				struct i2c_board_info *info)
-{
-	strcpy(info->type, RDA_WIFI_RF_I2C_DEVNAME);
-	return 0;
-}
-
-static const struct i2c_device_id wifi_rf_i2c_id[] ={
-	{RDA_WIFI_RF_I2C_DEVNAME, RDA_I2C_CHANNEL},
-	{}
-};
-
-static struct i2c_driver rda_wifi_rf_driver = {
-	.class = I2C_CLASS_HWMON,
-	.probe = rda_wifi_rf_probe,
-	.remove = rda_wifi_rf_remove,
-	.detect = rda_wifi_rf_detect,
-	.driver.name = RDA_WIFI_RF_I2C_DEVNAME,
-	.id_table = wifi_rf_i2c_id,
-};
-
-static int rda_wifi_core_detect(struct i2c_client *client,
-				struct i2c_board_info *info)
-{
-	strcpy(info->type, RDA_WIFI_CORE_I2C_DEVNAME);
-	return 0;
-}
-
-static int rda_wifi_core_probe(struct i2c_client *client,
-				const struct i2c_device_id *id)
-{
-	int result = 0;
-
-	rda_wifi_core_client = client;
-	printk("rda_wifi_core_probe \n");
-	return result;
-}
-
-static int rda_wifi_core_remove(struct i2c_client *client)
-{
-	return 0;
-}
 
 int rda_wifi_power_off(void)
 {
@@ -647,114 +593,9 @@ int rda_wifi_power_on(void)
 	return -1;
 }
 
-static void rda_wifi_shutdown(struct i2c_client *client)
-{
-	printk("rda_wifi_shutdown \n");
-#ifdef RDA_COMBO_FROM_FIRMWARE
-	if(atomic_read(&wifi_fw_status))
-#endif
-		rda_wifi_power_off();
-}
 
-static const struct i2c_device_id wifi_core_i2c_id[] = {
-	{RDA_WIFI_CORE_I2C_DEVNAME, RDA_I2C_CHANNEL},
-	{}
-};
-static struct i2c_driver rda_wifi_core_driver = {
-	.class = I2C_CLASS_HWMON,
-	.probe = rda_wifi_core_probe,
-	.remove = rda_wifi_core_remove,
-	.detect = rda_wifi_core_detect,
-	.shutdown = rda_wifi_shutdown,
-	.driver.name = RDA_WIFI_CORE_I2C_DEVNAME,
-	.id_table = wifi_core_i2c_id,
-};
 
-static int rda_bt_rf_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
-{
-	int result = 0;
 
-	rda_bt_rf_client = client;
-	printk("rda_bt_rf_probe \n");
-	return result;
-}
-
-static int rda_bt_rf_remove(struct i2c_client *client)
-{
-	rda_bt_rf_client = NULL;
-	return 0;
-}
-
-static int rda_bt_rf_detect(struct i2c_client *client,
-				struct i2c_board_info *info)
-{
-	strcpy(info->type, RDA_BT_RF_I2C_DEVNAME);
-	return 0;
-}
-
-static const struct i2c_device_id bt_rf_i2c_id[] = {
-	{RDA_BT_RF_I2C_DEVNAME, RDA_I2C_CHANNEL},
-	{}
-};
-static struct i2c_driver rda_bt_rf_driver = {
-	.class = I2C_CLASS_HWMON,
-	.probe = rda_bt_rf_probe,
-	.remove = rda_bt_rf_remove,
-	.detect = rda_bt_rf_detect,
-	.driver.name = RDA_BT_RF_I2C_DEVNAME,
-	.id_table = bt_rf_i2c_id,
-};
-
-static int rda_bt_core_detect(struct i2c_client *client,
-				  struct i2c_board_info *info)
-{
-	strcpy(info->type, RDA_BT_CORE_I2C_DEVNAME);
-	return 0;
-}
-
-void rda_combo_set_wake_lock(void);
-
-#ifdef CONFIG_BLUEZ_SUPPORT
-extern void hci_bt_wakeup_host(void);
-#endif
-
-static irqreturn_t rda_bt_host_wake_eirq_handler(int irq, void *dev_id)
-{
-#ifdef CONFIG_BLUEZ_SUPPORT
-	hci_bt_wakeup_host();
-#endif
-	rda_combo_set_wake_lock();
-	return IRQ_HANDLED;
-}
-
-static int rda_bt_core_probe(struct i2c_client *client,
-				 const struct i2c_device_id *id)
-{
-	int result = 0;
-	rda_bt_core_client = client;
-	printk("rda_bt_core_probe\n");
-	return result;
-}
-
-static int rda_bt_core_remove(struct i2c_client *client)
-{
-	return 0;
-}
-
-static const struct i2c_device_id bt_core_i2c_id[] ={
-	{RDA_BT_CORE_I2C_DEVNAME, RDA_I2C_CHANNEL},
-	{}
-};
-
-static struct i2c_driver rda_bt_core_driver = {
-	.class = I2C_CLASS_HWMON,
-	.probe = rda_bt_core_probe,
-	.remove = rda_bt_core_remove,
-	.detect = rda_bt_core_detect,
-	.driver.name = RDA_BT_CORE_I2C_DEVNAME,
-	.id_table = bt_core_i2c_id,
-};
 
 #ifdef CONFIG_BT_RANDADDR
 extern void bt_get_random_address(char *buf);
@@ -915,9 +756,6 @@ static long rda_combo_pw_ioctl(struct file *file, unsigned int cmd,
 	return ret;
 }
 
-static int rda_combo_major;
-static struct class *rda_combo_class = NULL;
-struct device *rda_combo_device;
 static const struct file_operations rda_combo_operations = {
 	.owner = THIS_MODULE,
 	.unlocked_ioctl = rda_combo_pw_ioctl,
@@ -927,22 +765,17 @@ static const struct file_operations rda_combo_operations = {
 void rda_combo_sleep_worker_task(struct work_struct *work)
 {
 	printk("---rda_combo_sleep_worker_task end \n");
-	wake_unlock(&rda_combo_wake_lock);
+	//wake_unlock(&rda_combo_wake_lock);
 }
 
 void rda_combo_set_wake_lock(void)
 {
-	wake_lock(&rda_combo_wake_lock);
+	//wake_lock(&rda_combo_wake_lock);
 	cancel_delayed_work(&rda_combo_sleep_worker);
 	schedule_delayed_work(&rda_combo_sleep_worker, 6 * HZ);
 }
 
-static struct platform_driver platform_driver = {
-	.driver = {
-		   .name = "rda_combo_rfkill_device",
-		   .owner = THIS_MODULE,
-		}
-};
+
 
 static int wlan_rfkill_set(void *data, bool blocked)
 {
@@ -989,6 +822,15 @@ static int rda_bt_power_on(void)
 static const struct rfkill_ops wlan_rfkill_ops = {
 	.set_block = wlan_rfkill_set,
 };
+
+static irqreturn_t rda_bt_host_wake_eirq_handler(int irq, void *dev_id)
+{
+#ifdef CONFIG_BLUEZ_SUPPORT
+	hci_bt_wakeup_host();
+#endif
+	rda_combo_set_wake_lock();
+	return IRQ_HANDLED;
+}
 
 static int bt_rfkill_set(void *data, bool blocked)
 {
@@ -1053,18 +895,22 @@ static const struct rfkill_ops gps_rfkill_ops = {
 	.set_block = gps_rfkill_set,
 };
 #endif
-int rda_combo_power_ctrl_init(void)
+static int rda_combo_power_ctrl_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+	struct gpio_desc* wake_pin;
 
 	printk("rda_combo_power_ctrl_init begin\n");
-	if (i2c_add_driver(&rda_wifi_core_driver)) {
+	
+	/*if (i2c_add_driver(&rda_wifi_core_driver))
+	{
 		printk("rda_wifi_core_driver failed!\n");
 		ret = -ENODEV;
 		return ret;
 	}
 
-	if (i2c_add_driver(&rda_wifi_rf_driver)) {
+	if (i2c_add_driver(&rda_wifi_rf_driver))
+	{
 		printk("rda_wifi_rf_driver failed!\n");
 		ret = -ENODEV;
 		return ret;
@@ -1080,39 +926,17 @@ int rda_combo_power_ctrl_init(void)
 		printk("rda_bt_rf_driver failed!\n");
 		ret = -ENODEV;
 		return ret;
-	}
+	}*/
+	
 #ifdef RDA_COMBO_FROM_FIRMWARE
-	mutex_init(&(rda_combo_fw_entry.lock));
 #endif
-	mutex_init(&i2c_rw_lock);
 	INIT_DELAYED_WORK(&rda_combo_sleep_worker,rda_combo_sleep_worker_task);
-	wake_lock_init(&rda_combo_wake_lock, WAKE_LOCK_SUSPEND,
-				"RDA_sleep_worker_wake_lock");
-	rda_combo_major =
-		register_chrdev(0, "rdacombo_power_ctrl", &rda_combo_operations);
-	if (rda_combo_major < 0) {
-		printk(KERN_INFO "register rdacombo_power_ctrl failed!!! \n");
-		ret = rda_combo_major;
-		goto fail;
-	}
-
-	rda_combo_class = class_create(THIS_MODULE, "rda_combo");
-	if (IS_ERR(rda_combo_class)) {
-		printk(KERN_INFO "create rda_combo_class failed!!! \n");
-		ret = PTR_ERR(rda_combo_class);
-		goto fail;
-	}
-
-	rda_combo_device= device_create(rda_combo_class, NULL, MKDEV(rda_combo_major, 0),
-			NULL, "rdacombo");
-	if (IS_ERR(rda_combo_device)) {
-		printk(KERN_INFO "create rda_combo_device failed!!! \n");
-		ret = -ENODEV;
-		goto fail;
-	}
-
-	combo_reg = regulator_get(NULL, LDO_BT);
-	if (IS_ERR(combo_reg)) {
+	//wake_lock_init(&rda_combo_wake_lock, WAKE_LOCK_SUSPEND, "RDA_sleep_worker_wake_lock");
+	
+	combo_reg = regulator_get(&pdev->dev, LDO_BT);
+	
+	if (IS_ERR(combo_reg))
+	{
 		printk(KERN_INFO "could not find regulator devices\n");
 		ret = PTR_ERR(combo_reg);
 		goto fail;
@@ -1128,91 +952,79 @@ int rda_combo_power_ctrl_init(void)
 			isBigEnded = 1;
 	}
 
-	ret = platform_driver_register(&platform_driver);
-	if (ret)
-		goto fail;
-
-	platform_device = platform_device_alloc("rda_combo_rfkill_device", -1);
-	if (!platform_device) {
-		ret = -ENOMEM;
-	} else
-		ret = platform_device_add(platform_device);
-
-	if (ret)
-		goto fail_platform_device;
+	
 
 
-	wlan_rfkill =
-		rfkill_alloc("rda_wlan_rk", &platform_device->dev, RFKILL_TYPE_WWAN,
-			 &wlan_rfkill_ops, NULL);
-	if (wlan_rfkill) {
+	wlan_rfkill = rfkill_alloc("rda_wlan_rk", &pdev->dev, RFKILL_TYPE_WWAN, &wlan_rfkill_ops, NULL);
+	if (wlan_rfkill)
+	{
 		rfkill_init_sw_state(wlan_rfkill, true);
 		ret = rfkill_register(wlan_rfkill);
 		if (ret < 0)
 			goto fail_rfkill_register;
-	} else
+	} 
+	else
 		printk("rda_wlan_rk failed\n");
 
-	bt_rfkill =
-		rfkill_alloc("rda_bt_rk", &platform_device->dev,
-			RFKILL_TYPE_BLUETOOTH, &bt_rfkill_ops, NULL);
+	bt_rfkill = rfkill_alloc("rda_bt_rk", &pdev->dev, RFKILL_TYPE_BLUETOOTH, &bt_rfkill_ops, NULL);
+	
 	if (bt_rfkill) {
 		rfkill_init_sw_state(bt_rfkill, true);
 		ret = rfkill_register(bt_rfkill);
 		if (ret < 0)
 			goto fail_rfkill_register;
-	} else
+	} 
+	else
 		printk("rda_bt_rk failed\n");
-
-#ifdef _TGT_AP_HAVE_GPS
-	gps_rfkill =
-		rfkill_alloc("rda_gps_rk", &platform_device->dev,
-			RFKILL_TYPE_GPS, &gps_rfkill_ops, NULL);
-	if (gps_rfkill) {
-		rfkill_init_sw_state(gps_rfkill, true);
-		ret = rfkill_register(gps_rfkill);
-		if (ret < 0)
-			goto fail_rfkill_register;
-	} else
-		printk("rda_gps_rk failed\n");
-#endif
-	ret = gpio_request(GPIO_BT_HOST_WAKE, "rda_bt_host_wake");
-	if (ret) {
+	
+	wake_pin = gpiod_get(&pdev->dev, "wakepin", GPIOD_IN);
+	
+	
+	if (IS_ERR(wake_pin))
+	{
 		/* this is not fatal */
-		printk("Fail to request GPIO for rda_bt_host_wake\n");
+		dev_err(&pdev->dev, "Fail to request GPIO for rda_bt_host_wake\n");
 		ret = 0;
-	} else {
-		bt_host_wake_irq = gpio_to_irq(GPIO_BT_HOST_WAKE);
-		if (bt_host_wake_irq < 0) {
+	} 
+	else {
+		bt_host_wake_irq = gpiod_to_irq(wake_pin);
+		
+		if (bt_host_wake_irq < 0)
+		{
 			ret = -1;
 			goto fail_platform_device;
 		}
-
-		ret = request_irq(bt_host_wake_irq,
-				rda_bt_host_wake_eirq_handler,
-				IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
-				"rda_bt_host_wake_irq", NULL);
-		if (ret)
-			goto fail_platform_device;
+		
+		ret = request_irq(bt_host_wake_irq, rda_bt_host_wake_eirq_handler, IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND, "rda_bt_host_wake_irq", NULL);
+		
+		if (ret) goto fail_platform_device;
+		
 	}
-
-	clk32k = clk_get(NULL, RDA_CLK_OUT);
-	clk26m = clk_get(NULL, RDA_CLK_AUX);
-
-
-	wlan_read_version_from_chip();
-	if (wlan_version == 0) {
-		ret = -1;
-		goto fail_wland_veriosn;
+	clk32k = clk_get(&pdev->dev, "rda_out");
+	
+	if (IS_ERR(clk32k)) {
+		dev_err(&pdev->dev, "cannot get clock clk32k\n");
 	}
+	
+	clk26m = clk_get(&pdev->dev, "rda_aux");
+	if (IS_ERR(clk26m)) {
+		dev_err(&pdev->dev, "cannot get clock clk26m\n");
+	}
+	
+	gpiod_put(wake_pin);
 
+	//wlan_read_version_from_chip();
+	//if (wlan_version == 0) {
+	//	ret = -1;
+	//	goto fail_wland_veriosn;
+	//}
 	init_completion(&rda_wifi_bt_comp);
 	complete(&rda_wifi_bt_comp);
 
 	printk("rda_combo_power_ctrl_init end\n");
 	return 0;
 
-fail_wland_veriosn:
+//fail_wland_veriosn:
 	disable_32k_rtc(CLOCK_MASK_ALL);
 	disable_26m_rtc(CLOCK_MASK_ALL);
 	clk_put(clk32k);
@@ -1234,42 +1046,35 @@ fail_platform_device:
 		rfkill_destroy(gps_rfkill);
 	}
 #endif
-	if (platform_device)
-		platform_device_unregister(platform_device);
-	platform_driver_unregister(&platform_driver);
+	
 
 fail:
 	if (!IS_ERR(combo_reg)) {
 		disable_26m_regulator(CLOCK_MASK_ALL);
 		regulator_put(combo_reg);
 	}
-	if (!IS_ERR(rda_combo_device))
-		device_destroy(rda_combo_class, MKDEV(rda_combo_major, 0));
-	if (rda_combo_class)
-		class_destroy(rda_combo_class);
-	if (rda_combo_major >= 0)
-		unregister_chrdev(rda_combo_major, "rdacombo_power_ctrl");
+
+	
 	cancel_delayed_work_sync(&rda_combo_sleep_worker);
-	wake_lock_destroy(&rda_combo_wake_lock);
-	i2c_del_driver(&rda_bt_rf_driver);
-	i2c_del_driver(&rda_bt_core_driver);
-	i2c_del_driver(&rda_wifi_rf_driver);
-	i2c_del_driver(&rda_wifi_core_driver);
+	//wake_lock_destroy(&rda_combo_wake_lock);
+	//i2c_del_driver(&rda_bt_rf_driver);
+	//i2c_del_driver(&rda_bt_core_driver);
+	//i2c_del_driver(&rda_wifi_rf_driver);
+	//i2c_del_driver(&rda_wifi_core_driver);
 	return ret;
 }
 
-void rda_combo_power_ctrl_exit(void)
+static int rda_combo_power_ctrl_remove(struct platform_device *pdev)
 {
-	i2c_del_driver(&rda_wifi_core_driver);
-	i2c_del_driver(&rda_wifi_rf_driver);
-	i2c_del_driver(&rda_bt_core_driver);
-	i2c_del_driver(&rda_bt_rf_driver);
-	unregister_chrdev(rda_combo_major, "rdacombo_power_ctrl");
-	if (rda_combo_class)
-		class_destroy(rda_combo_class);
+	//i2c_del_driver(&rda_wifi_core_driver);
+	//i2c_del_driver(&rda_wifi_rf_driver);
+	//i2c_del_driver(&rda_bt_core_driver);
+	//i2c_del_driver(&rda_bt_rf_driver);
+	
+
 
 	cancel_delayed_work_sync(&rda_combo_sleep_worker);
-	wake_lock_destroy(&rda_combo_wake_lock);
+	//wake_lock_destroy(&rda_combo_wake_lock);
 	disable_32k_rtc(CLOCK_MASK_ALL);
 	disable_26m_rtc(CLOCK_MASK_ALL);
 	clk_put(clk32k);
@@ -1286,15 +1091,13 @@ void rda_combo_power_ctrl_exit(void)
 
 	free_irq(bt_host_wake_irq, NULL);
 
-	if (platform_device) {
-		platform_device_unregister(platform_device);
-		platform_driver_unregister(&platform_driver);
-	}
+	
 
 	if (!IS_ERR(combo_reg)) {
 		disable_26m_regulator(CLOCK_MASK_ALL);
 			regulator_put(combo_reg);
 	}
+	return 0;
 }
 
 u8 check_test_mode(void)
@@ -1309,12 +1112,10 @@ u8 check_role_mode(void)
 
 void rda_combo_i2c_lock(void)
 {
-	mutex_lock(&i2c_rw_lock);
 }
 
 void rda_combo_i2c_unlock(void)
 {
-	mutex_unlock(&i2c_rw_lock);
 }
 
 int rda_fm_power_on(void)
@@ -1350,6 +1151,37 @@ int rda_fm_power_off(void)
 
 }
 
+
+static const struct of_device_id rda_combo_net[] = {
+	{ .compatible = "rda,8810pl-combo-net" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, rda_combo_net);
+
+static struct platform_driver rda_combo_net_driver = {
+	.probe		= rda_combo_power_ctrl_probe,
+	.remove 	= rda_combo_power_ctrl_remove,
+
+	.driver 	= {
+		.name	= RDA_COMBO_NET_NAME,
+		.owner	= THIS_MODULE,
+		.of_match_table = rda_combo_net,
+	},
+};
+
+static int __init rda_combo_net_init(void)
+{
+	return platform_driver_register(&rda_combo_net_driver);
+
+}
+
+static void __exit rda_combo_net_exit(void)
+{
+	platform_driver_unregister(&rda_combo_net_driver);
+}
+
+
+
 EXPORT_SYMBOL(rda_wlan_version);
 EXPORT_SYMBOL(check_test_mode);
 EXPORT_SYMBOL(check_role_mode);
@@ -1358,6 +1190,9 @@ EXPORT_SYMBOL(rda_wifi_power_off);
 EXPORT_SYMBOL(rda_wifi_power_on);
 EXPORT_SYMBOL(rda_fm_power_on);
 EXPORT_SYMBOL(rda_fm_power_off);
-late_initcall(rda_combo_power_ctrl_init);
-module_exit(rda_combo_power_ctrl_exit);
+
+module_init(rda_combo_net_init);
+module_exit(rda_combo_net_exit);
 MODULE_LICENSE("GPL");
+
+

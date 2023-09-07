@@ -129,14 +129,16 @@ static inline struct sk_buff *pktq_ppeek_tail(struct pktq *pq, int prec)
 	return skb_peek_tail(&pq->q[prec].skblist);
 }
 
-extern void wland_timer_handler(ulong fcontext);
+extern void wland_timer_handler(struct timer_list *t);
 
 static inline void wland_init_timer(struct wland_drv_timer *timer, timer_cb_fn_t func, void *data, u16 event)
 {
 	/* first, setup the timer to trigger the wland_timer_handler proxy */
-	init_timer(&timer->tl);
-	timer->tl.function       = wland_timer_handler;
-	timer->tl.data           = (u32) timer;
+	//init_timer(&timer->tl);
+	//timer->tl.function       = wland_timer_handler;
+	//timer->tl.data           = (u32) timer;
+	
+	timer_setup(&timer->tl, wland_timer_handler, 0);
 
 	/* then tell the proxy which function to call and what to pass it */
 	timer->func              = func;

@@ -18,7 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/regulator/machine.h>
 
-#include <mach/regulator.h>
+#include <rda/mach/regulator.h>
 
 #ifndef CONFIG_RDA_FPGA
 /*internal cfg transfer layer: (customer and user ignore it)

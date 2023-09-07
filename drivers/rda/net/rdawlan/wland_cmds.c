@@ -291,7 +291,6 @@ int wland_fil_set_cmd_data(struct wland_if *ifp, u16 cmd, void *data, u16 len)
 		return -EIO;
 	}
 
-	mutex_lock(&drvr->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -333,7 +332,6 @@ retry:
 	WLAND_DBG(DCMD, TRACE, "Write_MsgIdx:%d, Read_MsgIdx:%d.\n", wid_msg_id,
 		prot->msg.wid_msg_id);
 done:
-	mutex_unlock(&drvr->proto_block);
 
 	WLAND_DBG(DCMD, TRACE,
 		"Done(cmd:0x%x,len:%d,rsplen:%d,widx:%d,ridx:%d)\n", cmd, len,
@@ -361,7 +359,6 @@ int wland_fil_get_cmd_data(struct wland_if *ifp, u16 cmd, void *data, u16 len)
 
 	WLAND_DBG(DCMD, TRACE, "(cmd:0x%x,len:%d),Enter\n", cmd, len);
 
-	mutex_lock(&drvr->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -419,7 +416,6 @@ retry:
 	WLAND_DBG(DCMD, TRACE, "Write_MsgIdx:%d, Read_MsgIdx:%d.\n", wid_msg_id,
 		prot->msg.wid_msg_id);
 done:
-	mutex_unlock(&drvr->proto_block);
 
 	WLAND_DBG(DCMD, TRACE, "(cmd:0x%x,len:%d),Done.\n", cmd, len);
 
@@ -434,13 +430,11 @@ s32 wland_fil_iovar_data_set(struct wland_if * ifp, char *name, void *data,
 #if 0
 	struct wland_private *drvr = ifp->drvr;
 
-	mutex_lock(&drvr->proto_block);
 
 	WLAND_DBG(DCMD, TRACE, "name=%s, len=%d\n", name, len);
 
 	memcpy(drvr->proto_buf, data, len);
 	err = wland_proto_cdc_set_dcmd(drvr, ifp->ifidx, drvr->proto_buf, len);
-	mutex_unlock(&drvr->proto_block);
 #endif
 	return err;
 }
@@ -453,7 +447,6 @@ s32 wland_fil_iovar_data_get(struct wland_if * ifp, char *name, void *data,
 #if 0
 	struct wland_private *drvr = ifp->drvr;
 
-	mutex_lock(&drvr->proto_block);
 
 	memcpy(drvr->proto_buf, data, len);
 
@@ -464,7 +457,6 @@ s32 wland_fil_iovar_data_get(struct wland_if * ifp, char *name, void *data,
 
 	WLAND_DBG(DCMD, TRACE, "name=%s, len=%d\n", name, len);
 
-	mutex_unlock(&drvr->proto_block);
 #endif
 	return err;
 }
@@ -546,7 +538,6 @@ s32 wland_set_scan_timeout(struct wland_if * ifp)
 		return ret;
 	}
 
-	mutex_lock(&drvr->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -597,7 +588,6 @@ s32 wland_set_scan_timeout(struct wland_if * ifp)
 
 	ret = wland_proto_cdc_data(drvr, wid_msg_len);
 
-	mutex_unlock(&drvr->proto_block);
 
 	WLAND_DBG(DCMD, TRACE, "Done(ret:%d,wid_pkg_len:%d,wid_msg_len:%d)\n",
 		ret, (wid_msg_len + WID_HEADER_LEN), wid_msg_len);
@@ -619,7 +609,6 @@ s32 wland_start_ap_set(struct wland_if * ifp,
 	u32 u32Value;
 
 	WLAND_DBG(DCMD, DEBUG, "Enter\n");
-	mutex_lock(&drvr->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -768,7 +757,6 @@ s32 wland_start_ap_set(struct wland_if * ifp,
 
 	ret = wland_proto_cdc_data(drvr, wid_msg_len);
 
-	mutex_unlock(&drvr->proto_block);
 	WLAND_DBG(DCMD, DEBUG, "Done(ret=%d).\n", ret);
 
 	return ret;
@@ -787,7 +775,6 @@ s32 wland_start_scan_set(struct wland_if * ifp,
 	u8 size;
 
 	WLAND_DBG(DCMD, TRACE, "Enter %s scan\n", enable ? "start" : "stop");
-	mutex_lock(&drvr->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -921,7 +908,6 @@ s32 wland_start_scan_set(struct wland_if * ifp,
 
 	ret = wland_proto_cdc_data(drvr, wid_msg_len);
 
-	mutex_unlock(&drvr->proto_block);
 	WLAND_DBG(DCMD, DEBUG, "Done %s scan\n", enable ? "start" : "stop");
 
 	//if the chip version is 91G ,return -ENOMEM while sending wid error to inform android reopen WIFI, otherwise it always return 0.
@@ -951,7 +937,6 @@ s32 wland_start_join(struct wland_if * ifp,
 		profile->ssid.SSID, profile->ssid.SSID_len);
 	WLAND_DBG(DCMD, INFO, "Connecting to " MACDBG "\n",
 		MAC2STRDBG(profile->bssid));
-	mutex_lock(&drvr->proto_block);
 
 	memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -1296,7 +1281,6 @@ s32 wland_start_join(struct wland_if * ifp,
 
 	ret = wland_proto_cdc_data(drvr, wid_msg_len);
 
-	mutex_unlock(&drvr->proto_block);
 
 	return ret;
 }
@@ -1321,7 +1305,6 @@ s32 wland_disconnect_bss(struct wland_if * ifp,
 			ETH_ALEN);
 	} else {
 
-		mutex_lock(&drvr->proto_block);
 
 		memset(prot->buf, '\0', sizeof(prot->buf));
 
@@ -1344,7 +1327,6 @@ s32 wland_disconnect_bss(struct wland_if * ifp,
 
 		ret = wland_proto_cdc_data(drvr, wid_msg_len);
 
-		mutex_unlock(&drvr->proto_block);
 	}
 
 	WLAND_DBG(DCMD, TRACE, "Done(disconnect reason:%d).\n", scbval->val);
@@ -1377,14 +1359,15 @@ s32 wland_add_wep_key_bss_sta(struct wland_if * ifp, u8 * key, u8 wep_len,
 	return err;
 }
 
-s32 wland_fil_set_mgmt_ie(struct wland_if * ifp, u8 * vndr_ie_buf, u16 vndr_ie_len)
+s32 wland_fil_set_mgmt_ie(struct wland_if * ifp, u8 * vndr_ie_buf,
+	u16 vndr_ie_len)
 {
 	s32 ret = 0;
 	struct wland_private *drvr = ifp->drvr;
 
 	vndr_ie_len = vndr_ie_buf[1] + 2;
-	//WLAND_DBG(DCMD, TRACE,"Enter vndr_ie_len=%d, vndr_ie_buf=%p\n", vndr_ie_len, vndr_ie_buf);
-	//WLAND_DUMP(TX_CTRL, vndr_ie_buf, vndr_ie_len, "mgmt_le_len:%Zu\n", vndr_ie_len);
+	WLAND_DBG(DCMD, TRACE,"Enter vndr_ie_len=%d, vndr_ie_buf=%p\n", vndr_ie_len, vndr_ie_buf);
+	WLAND_DUMP(TX_CTRL, vndr_ie_buf, vndr_ie_len, "mgmt_le_len:%Zu\n", vndr_ie_len);
 
 	if (drvr->bus_if->chip == WLAND_VER_91_E
 		|| drvr->bus_if->chip == WLAND_VER_91_F
@@ -1399,7 +1382,8 @@ s32 wland_fil_set_mgmt_ie(struct wland_if * ifp, u8 * vndr_ie_buf, u16 vndr_ie_l
 		ret = wland_fil_set_cmd_data(ifp, WID_WAPI_ASSOC_IE,
 			vndr_ie_buf, vndr_ie_len);
 
-	//WLAND_DBG(DCMD, TRACE, "Enter(vndr_ie_buf:0x%x,ret:%d)\n", vndr_ie_buf[0], ret);
+	WLAND_DBG(DCMD, TRACE, "Enter(vndr_ie_buf:0x%x,ret:%d)\n",
+		vndr_ie_buf[0], ret);
 
 	return ret;
 }

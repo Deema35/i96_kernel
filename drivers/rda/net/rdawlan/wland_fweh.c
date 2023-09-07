@@ -372,10 +372,10 @@ out:
 }
 #endif
 
-void wland_timer_handler(ulong fcontext)
+void wland_timer_handler(struct timer_list *tList)
 {
 #if 0
-	struct wland_drv_timer *timer = (struct wland_drv_timer *) fcontext;
+	struct wland_drv_timer *timer = (struct wland_drv_timer *) from_timer(timer, tList, tl) fcontext;
 
 	if (timer->func) {
 		timer->func(timer->data);
@@ -428,7 +428,7 @@ void wland_netif_rx(struct wland_if *ifp, struct sk_buff *skb)
 		return;
 	}
 
-	ifp->ndev->last_rx = jiffies;
+	
 	ifp->stats.rx_bytes += skb->len;
 	ifp->stats.rx_packets++;
 
@@ -442,7 +442,7 @@ void wland_netif_rx(struct wland_if *ifp, struct sk_buff *skb)
 		 * If the receive is not processed inside an ISR, the softirqd must be woken explicitly to service the NET_RX_SOFTIRQ.
 		 * * In 2.6 kernels, this is handledby netif_rx_ni(), but in earlier kernels, we need to do it manually.
 		 */
-		netif_rx_ni(skb);
+		netif_rx(skb);
 	}
 }
 

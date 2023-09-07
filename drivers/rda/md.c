@@ -33,11 +33,11 @@
 #include <linux/uaccess.h>
 #include <asm/io.h>
 #include <asm/ioctls.h>
-#include <plat/devices.h>
+#include <rda/plat/devices.h>
 
-#include <plat/reg_md.h>
-#include <plat/rda_md.h>
-#include <plat/ipc.h>
+#include <rda/plat/reg_md.h>
+#include <rda/plat/rda_md.h>
+#include <rda/plat/ipc.h>
 
 //#define line()  printk("[%s %s %d]\n", __FILE__, __func__, __LINE__)
 #define line()
@@ -1084,13 +1084,14 @@ static struct device_attribute rda_md_attrs[] = {
 	__ATTR(md_rx, S_IRUGO, rda_md_rx_show, NULL),
 };
 
-extern void rda_get_log_buf_info(unsigned int *addr_ptr, unsigned int *len_ptr);
+//extern void rda_get_log_buf_info(unsigned int *addr_ptr, unsigned int *len_ptr);
 extern void rda_logger_get_info(unsigned int *addr_ptr, unsigned int *len_ptr, int index);
 
 static int rda_md_probe(struct platform_device *pdev)
 {
 	struct md_port *md_port;
 	struct resource *data_mem;
+	struct resource *data_mem2;
 	struct md_dev *pmd = NULL;
 	struct rda_klog_addr *pklog = NULL;
 	int i;
@@ -1105,8 +1106,9 @@ static int rda_md_probe(struct platform_device *pdev)
 
     line();
 	/* Get resources from our definitions. */
-	data_mem = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!data_mem) {
+	data_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	data_mem2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	if (!data_mem || !data_mem2) {
 		dev_err(&pdev->dev, "no data mem resource\n");
 		ret = -EINVAL;
 		goto err_get_resource;
@@ -1121,11 +1123,11 @@ static int rda_md_probe(struct platform_device *pdev)
 	}
 
     line();
-	/* Using static io mapping instead of dynamic allocated. */
-	pmd->ctrl_base = (void *)RDA_COMREGS_BASE;
-	/* I/O remap */
-	pmd->mem_base = ioremap(data_mem->start, resource_size(data_mem));
-	if (!pmd->mem_base) {
+	
+	pmd->ctrl_base = ioremap(data_mem->start, resource_size(data_mem));
+	
+	pmd->mem_base = ioremap(data_mem2->start, resource_size(data_mem2));
+	if (!pmd->mem_base || !pmd->ctrl_base) {
 		dev_err(&pdev->dev, "remap data mem fail!\n");
 		ret = -ENOMEM;
 		goto err_io_remap;
@@ -1198,7 +1200,7 @@ static int rda_md_probe(struct platform_device *pdev)
 	 * e.g printk of kernel, main, events, radio, and system of android.
 	 */
 	pklog = (struct rda_klog_addr *)(pmd->mem_base + MD_KLOG_ADDR_OFFSET + MD_KLOG_PRINTK_OFFSET);
-	rda_get_log_buf_info(&pklog->kbuf_addr, &pklog->kbuf_size);
+	//rda_get_log_buf_info(&pklog->kbuf_addr, &pklog->kbuf_size);
     line();
 
 	pklog = (struct rda_klog_addr *)(pmd->mem_base + MD_KLOG_ADDR_OFFSET + MD_KLOG_MAIN_OFFSET);
@@ -1250,11 +1252,17 @@ err_get_resource:
 	return ret;
 }
 
+static const struct of_device_id rda_md_dt_matches[] = {
+	{ .compatible = "rda,8810pl-rda_md" },
+	{ }
+};
+
 static struct platform_driver rda_md_driver = {
 	.probe = rda_md_probe,
 	.driver = {
 		.name = RDA_MD_DRV_NAME,
 		.owner = THIS_MODULE,
+		.of_match_table = rda_md_dt_matches,
 	},
 };
 

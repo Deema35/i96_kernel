@@ -102,7 +102,7 @@ int wland_bus_start(struct device *dev)
 	ret = wlan_read_mac_from_nvram(mac_addr);
 	if (ret) {
 		WLAND_ERR("nvram:get a random ether address\n");
-		random_ether_addr(mac_addr);
+		eth_random_addr(mac_addr);
 		if (ret == -EINVAL)
 			wlan_write_mac_to_nvram(mac_addr);
 	} else {
@@ -114,7 +114,7 @@ int wland_bus_start(struct device *dev)
 	}
 #elif defined(WLAND_MACADDR_DYNAMIC)
 	if (wland_get_mac_address(mac_addr) != ETH_ALEN) {
-		random_ether_addr(mac_addr);
+		eth_random_addr(mac_addr);
 		if (wland_set_mac_address(mac_addr) < 0) {
 			WLAND_ERR("set cur_etheraddr failed!\n");
 			return -ENODEV;
@@ -352,7 +352,6 @@ int wland_bus_attach(uint bus_hdrlen, struct device *dev)
 
 	memset(drvr, '\0', sizeof(struct wland_private));
 
-	mutex_init(&drvr->proto_block);
 
 	/*
 	 * Link to bus module

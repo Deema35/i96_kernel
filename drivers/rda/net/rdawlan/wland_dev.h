@@ -788,7 +788,7 @@ static inline int is_same_network(struct bss_descriptor *src,
 	 * * as one network
 	 */
 	return ((src->channel == dst->channel) &&
-		!compare_ether_addr(src->bssid, dst->bssid) &&
+		ether_addr_equal(src->bssid, dst->bssid) &&
 		!memcmp(src->ssid, dst->ssid, IW_ESSID_MAX_SIZE));
 }
 

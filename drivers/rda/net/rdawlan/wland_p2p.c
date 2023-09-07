@@ -2455,11 +2455,9 @@ s32 cfg80211_p2p_start_device(struct wiphy * wiphy, struct wireless_dev * wdev)
 
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
-	mutex_lock(&cfg->usr_sync);
 	err = wland_p2p_enable_discovery(p2p);
 	if (!err)
 		set_bit(VIF_STATUS_READY, &vif->sme_state);
-	mutex_unlock(&cfg->usr_sync);
 
 	return err;
 }
@@ -2473,11 +2471,9 @@ void cfg80211_p2p_stop_device(struct wiphy *wiphy, struct wireless_dev *wdev)
 
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
-	mutex_lock(&cfg->usr_sync);
 	wland_p2p_deinit_discovery(p2p);
 	wland_abort_scanning(cfg);
 	clear_bit(VIF_STATUS_READY, &vif->sme_state);
-	mutex_unlock(&cfg->usr_sync);
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
 

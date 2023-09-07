@@ -529,19 +529,20 @@ int wland_sdio_recv_pkt(struct wland_sdio *bus, struct sk_buff *skbbuf,
 	return ret;
 }
 
-static int wland_ops_sdio_probe(struct sdio_func *func,
-	const struct sdio_device_id *id)
+static int wland_ops_sdio_probe(struct sdio_func *func, const struct sdio_device_id *id)
 {
 	struct wland_sdio_dev *sdiodev;
 	struct wland_bus *bus_if;
 	struct osl_info *osh;
 	int err = -ENODEV;
+	
+	printk("wland_ops_sdio_probe_1\n");
 
 	WLAND_DBG(SDIO, TRACE, "Enter\n");
-	WLAND_DBG(SDIO, INFO, "Class=%x\n", func->class);
-	WLAND_DBG(SDIO, INFO, "sdio vendor ID: 0x%04x\n", func->vendor);
-	WLAND_DBG(SDIO, INFO, "sdio device ID: 0x%04x\n", func->device);
-	WLAND_DBG(SDIO, INFO, "Function#: %d\n", func->num);
+	printk( "Class=%x\n", func->class);
+	printk( "sdio vendor ID: 0x%04x\n", func->vendor);
+	printk( "sdio device ID: 0x%04x\n", func->device);
+	printk( "Function#: %d\n", func->num);
 
 	if (id->vendor != SDIO_VENDOR_ID_RDAWLAN) {
 		WLAND_ERR("Unmatch Vendor ID: 0x%x.\n", id->vendor);
@@ -716,6 +717,8 @@ static const struct dev_pm_ops wland_sdio_pm_ops = {
 };
 #endif /* ifdef CONFIG_PM */
 
+
+
 static struct sdio_driver wland_sdmmc_driver = {
 	.probe = wland_ops_sdio_probe,
 	.remove = wland_ops_sdio_remove,
@@ -769,21 +772,24 @@ void wland_sdioh_detach(struct wland_sdio_dev *sdiodev)
 
 void wland_sdio_register(void)
 {
-	WLAND_DBG(SDIO, TRACE, "Enter\n");
+	
 
-	if (sdio_register_driver(&wland_sdmmc_driver)) {
+	if (sdio_register_driver(&wland_sdmmc_driver))
+	{
 		WLAND_ERR("sdio_register_driver failed\n");
 		wland_registration_sem_up(false);
-	} else {
+	} else
+	{
 		/*
 		 * disable sdio interrupt
 		 */
 		rda_mmc_set_sdio_irq(1, false);
-
 		/*
 		 * trigger sdio bus scan device
 		 */
+		 
 		rda_mmc_bus_scan(1);
+		
 	}
 
 	WLAND_DBG(SDIO, TRACE, "Done\n");
@@ -791,10 +797,12 @@ void wland_sdio_register(void)
 
 void wland_sdio_exit(void)
 {
+	printk("wland_sdio_register1\n");
 	WLAND_DBG(SDIO, TRACE, "Enter\n");
 	sdio_unregister_driver(&wland_sdmmc_driver);
 	WLAND_DBG(SDIO, TRACE, "Done\n");
 }
+
 
 //////////////////////////////////////////////////////////////////////////////////
 //                                                                              //

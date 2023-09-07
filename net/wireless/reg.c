@@ -2627,7 +2627,7 @@ void wiphy_apply_custom_regulatory(struct wiphy *wiphy,
 	if (IS_ERR(new_regd))
 		return;
 
-	rtnl_lock();
+	//rtnl_lock();
 	wiphy_lock(wiphy);
 
 	tmp = get_wiphy_regdom(wiphy);
@@ -2635,7 +2635,7 @@ void wiphy_apply_custom_regulatory(struct wiphy *wiphy,
 	rcu_free_regdom(tmp);
 
 	wiphy_unlock(wiphy);
-	rtnl_unlock();
+	//rtnl_unlock();
 }
 EXPORT_SYMBOL(wiphy_apply_custom_regulatory);
 

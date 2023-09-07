@@ -8,6 +8,7 @@
 
 #include "rda8810pl.dtsi"
 
+
 / {
 	compatible = "xunlong,orangepi-i96", "rda,8810pl";
 	model = "Orange Pi i96";
@@ -17,6 +18,7 @@
 		serial1 = &uart1;
 		serial2 = &uart3;
 	};
+	
 
 	chosen {
 		stdout-path = "serial2:921600n8";
@@ -32,6 +34,8 @@
 		clock-frequency = <921600>;
 		#clock-cells = <0>;
 	};
+	
+	
 };
 
 &uart1 {
@@ -48,3 +52,18 @@
 	status = "okay";
 	clocks = <&uart_clk>;
 };
+
+&mmc0 {
+	max-frequency = <30000000>;
+	status = "okay";
+};
+
+&mmc1 {
+	max-frequency = <20000000>;
+	status = "okay";
+};
+
+//&mmc2 {
+//	max-frequency = <30000000>;
+//	status = "okay";
+//};

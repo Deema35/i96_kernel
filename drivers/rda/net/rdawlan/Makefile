@@ -16,8 +16,8 @@
 # CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ccflags-y += \
-	-Idrivers/net/wireless/rdaw80211/rdawlan\
-	-Idrivers/net/wireless/rdaw80211/include
+	-Idrivers/rda/net/rdawlan\
+	-Idrivers/rda/net/include
 
 ccflags-y += -D__CHECK_ENDIAN__
 

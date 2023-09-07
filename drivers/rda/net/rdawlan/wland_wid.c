@@ -414,11 +414,13 @@ done:
 
 int wland_start_chip(struct wland_if *ifp, u8 device_role)
 {
+	
 	struct wland_private *drvr = ifp->drvr;
 	struct wland_sdio_dev *sdiodev = drvr->bus_if->bus_priv.sdio;
 	struct wland_sdio *bus = sdiodev->bus;
 	int err = -ENODEV;
-
+	
+	printk("wland_start_chip\n");
 	WLAND_DBG(DCMD, DEBUG, "Enter\n");
 	if (!ifp) {
 		WLAND_ERR("ifp Empty!\n");
@@ -472,7 +474,7 @@ int wland_start_chip(struct wland_if *ifp, u8 device_role)
 		 * revert six bit of the byte
 		 */
 		ifp->mac_addr[5] ^= (1 << (5));
-		memcpy(ifp->ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
+		memcpy((void*)ifp->ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
 	}
 
 	WLAND_DBG(DCMD, DEBUG, "Enter(device_role:0x%x)\n", device_role);

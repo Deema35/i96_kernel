@@ -20,7 +20,7 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <asm/atomic.h>
-#include <plat/pm_ddr.h>
+#include <rda/plat/pm_ddr.h>
 
 static atomic64_t pm_ddr_map = ATOMIC64_INIT(0);
 static spinlock_t pm_ddr_lock;

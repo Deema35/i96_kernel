@@ -5,10 +5,10 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 
-#include <plat/reg_ifc.h>
-#include <mach/ifc.h>
-#include <plat/cpu.h>
-#include <plat/pm_ddr.h>
+#include <rda/plat/reg_ifc.h>
+#include <rda/mach/ifc.h>
+#include <rda/plat/cpu.h>
+#include <rda/plat/pm_ddr.h>
 
 static HAL_IFC_REQUEST_ID_T ifc_channel_owner[SYS_IFC_STD_CHAN_NB];
 static spinlock_t ifc_lock;
@@ -211,7 +211,6 @@ u8 ifc_transfer_start(HAL_IFC_REQUEST_ID_T request_id, u8* mem_addr,
 	BUG_ON(!hwp_sysIfc);
 	BUG_ON(!xfer_size);
 	BUG_ON(xfer_size > 0x7FFFFF);
-
 	if (rda_soc_is_older_metal10()) {
 		/* To see if the address is aligned with 16Bytes and cross boundary. */
 		if (!IS_ALIGNED((u32)mem_addr, 16) &&
@@ -222,15 +221,14 @@ u8 ifc_transfer_start(HAL_IFC_REQUEST_ID_T request_id, u8* mem_addr,
 			BUG_ON(1);
 		}
 	}
-
 	spin_lock_irqsave(&ifc_lock, flags);
 	/* alloc channel by hardware */
 	channel = SYS_IFC_CH_TO_USE(hwp_sysIfc->get_ch) ;
-	if (channel >= SYS_IFC_STD_CHAN_NB) {
+	if (channel >= SYS_IFC_STD_CHAN_NB)
+	{
 		spin_unlock_irqrestore(&ifc_lock, flags);
 		return HAL_UNKNOWN_CHANNEL;
 	}
-
 	master_idx = PM_DDR_IFC0 + channel;
 	pm_ddr_get(master_idx);
 	/* take the channel */
@@ -282,15 +280,15 @@ void ifc_transfer_stop(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 static int __init ifc_init(void)
 {
 	u8 channel;
-
 	spin_lock_init(&ifc_lock);
 
 	/* Initialize the channel table with unknown requests. */
-	for (channel = 0; channel < SYS_IFC_STD_CHAN_NB; channel++) {
+	for (channel = 0; channel < SYS_IFC_STD_CHAN_NB; channel++)
+	{
 		ifc_channel_owner[channel] = HAL_IFC_NO_REQWEST;
 	}
-
-	hwp_sysIfc = ((HWP_SYS_IFC_T*)IO_ADDRESS(RDA_IFC_BASE));
+	hwp_sysIfc = (HWP_SYS_IFC_T*)ioremap(RDA_IFC_PHYS, RDA_IFC_SIZE);
+	//hwp_sysIfc = ((HWP_SYS_IFC_T*)IO_ADDRESS(RDA_IFC_BASE));
 	return 0;
 }
 

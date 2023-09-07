@@ -47,7 +47,7 @@
 #endif
 
 static char wland_ver[] =
-	"Compiled in " SRCBASE " on " __DATE__ " at " __TIME__;
+	"Compiled in " SRCBASE " on ";
 
 #define MAX_WAIT_FOR_8021X_TX		        50	/* msecs */
 
@@ -130,14 +130,14 @@ static void _wland_set_multicast_list(struct work_struct *work)
 
 	bufp = buf;
 	cnt_le = cpu_to_le32(cnt);
-	memcpy(bufp, &cnt_le, sizeof(cnt_le));
+	memcpy((void*)bufp, &cnt_le, sizeof(cnt_le));
 	bufp += sizeof(cnt_le);
 
 	netif_addr_lock_bh(ndev);
 	netdev_for_each_mc_addr(ha, ndev) {
 		if (!cnt)
 			break;
-		memcpy(bufp, ha->addr, ETH_ALEN);
+		memcpy((void*)bufp, ha->addr, ETH_ALEN);
 		bufp += ETH_ALEN;
 		cnt--;
 	}
@@ -187,7 +187,8 @@ static void _wland_set_mac_address(struct work_struct *work)
 	} else {
 		WLAND_DBG(DEFAULT, TRACE, "MAC address updated to %pM\n",
 			ifp->mac_addr);
-		memcpy(ifp->ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
+		memcpy((void*)ifp->ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
+		memcpy((void *)ifp->ndev->dev_addr_shadow, ifp->mac_addr, ETH_ALEN);
 	}
 }
 
@@ -213,7 +214,7 @@ static void netdev_set_multicast_list(struct net_device *ndev)
 	schedule_work(&ifp->multicast_work);
 }
 
-int netdev_start_xmit(struct sk_buff *skb, struct net_device *ndev)
+int netdev_start_xmit_op(struct sk_buff *skb, struct net_device *ndev)
 {
 	int ret = NETDEV_TX_OK;
 	struct wland_if *ifp = netdev_priv(ndev);
@@ -627,7 +628,7 @@ static int netdev_open(struct net_device *ndev)
 #endif /*WLAND_TBD_SUPPORT */
 	s32 ret = 0;
 
-	WLAND_DBG(DEFAULT, TRACE, "Enter, idx=%d\n", ifp->bssidx);
+	WLAND_ERR("Enter, idx=%d\n", ifp->bssidx);
 
 	/*
 	 * If bus is not ready, can't continue
@@ -636,10 +637,11 @@ static int netdev_open(struct net_device *ndev)
 		WLAND_ERR("failed bus is not ready\n");
 		return -EAGAIN;
 	}
-
+	
 	atomic_set(&ifp->pend_8021x_cnt, 0);
 
 #ifdef WLAND_TBD_SUPPORT
+	
 	/*
 	 * Get current TOE mode from dongle
 	 */
@@ -649,11 +651,13 @@ static int netdev_open(struct net_device *ndev)
 	else
 		ndev->features &= ~NETIF_F_IP_CSUM;
 #endif /*WLAND_TBD_SUPPORT */
-
+	
 	if (wland_cfg80211_up(ndev) < 0) {
 		WLAND_ERR("failed to bring up cfg80211\n");
 		ret = -ENODEV;
 	}
+	
+	
 
 	/*
 	 * Allow transmit calls
@@ -668,11 +672,11 @@ static int netdev_open(struct net_device *ndev)
 	return ret;
 }
 
-static void netdev_tx_timeout(struct net_device *dev)
+static void netdev_tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
 	WLAND_DBG(DEFAULT, TRACE, "Enter\n");
 
-	dev->trans_start = jiffies;	/* prevent tx timeout */
+	//dev->trans_start = jiffies;	/* prevent tx timeout */
 	netif_wake_queue(dev);
 	dev->stats.tx_errors++;
 
@@ -684,14 +688,11 @@ static const struct net_device_ops wland_netdev_ops_pri = {
 	.ndo_stop = netdev_stop,
 	.ndo_get_stats = netdev_get_stats,
 	.ndo_do_ioctl = netdev_ioctl_entry,
-	.ndo_start_xmit = netdev_start_xmit,
+	.ndo_start_xmit = netdev_start_xmit_op,
 	.ndo_tx_timeout = netdev_tx_timeout,
 	.ndo_set_mac_address = netdev_set_mac_address,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
 	.ndo_set_rx_mode = netdev_set_multicast_list,
-#else /*(LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)) */
-	.ndo_set_multicast_list = netdev_set_multicast_list,
-#endif /*(LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)) */
+
 };
 
 int netdev_attach(struct wland_if *ifp)
@@ -723,7 +724,8 @@ int netdev_attach(struct wland_if *ifp)
 	/*
 	 * set the mac address
 	 */
-	memcpy(ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
+	memcpy((void*)ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
+	memcpy((void *)ndev->dev_addr_shadow, ifp->mac_addr, ETH_ALEN);
 
 	WLAND_DBG(DEFAULT, TRACE, "Enter,(%s:idx:%d,ifidx:0x%x)\n", ndev->name,
 		ifp->bssidx, ifp->ifidx);
@@ -740,8 +742,10 @@ int netdev_attach(struct wland_if *ifp)
 
 	INIT_WORK(&ifp->setmacaddr_work, _wland_set_mac_address);
 	INIT_WORK(&ifp->multicast_work, _wland_set_multicast_list);
+	
+	ndev->needs_free_netdev = true;
+	ndev->priv_destructor = free_netdev;
 
-	ndev->destructor = free_netdev;
 	return 0;
 
 fail:
@@ -837,7 +841,7 @@ int netdev_p2p_attach(struct wland_if *ifp)
 	/*
 	 * set the mac address
 	 */
-	memcpy(ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
+	memcpy((void*)ndev->dev_addr, ifp->mac_addr, ETH_ALEN);
 
 	WLAND_DBG(DEFAULT, TRACE, "Enter(idx:%d,mac:%pM)\n", ifp->bssidx,
 		ifp->mac_addr);
@@ -908,7 +912,7 @@ struct wland_if *wland_add_if(struct wland_private *drvr, s32 bssidx, s32 ifidx,
 		/*
 		 * Allocate netdev, including space for private structure
 		 */
-		ndev = alloc_netdev(sizeof(struct wland_if), name, ether_setup);
+		ndev = alloc_netdev(sizeof(struct wland_if), name, NET_NAME_UNKNOWN, ether_setup);
 		if (!ndev)
 			return ERR_PTR(-ENOMEM);
 
@@ -929,7 +933,7 @@ struct wland_if *wland_add_if(struct wland_private *drvr, s32 bssidx, s32 ifidx,
 	spin_lock_init(&ifp->netif_stop_lock);
 
 	if (mac_addr)
-		memcpy(ifp->mac_addr, mac_addr, ETH_ALEN);
+		memcpy((void*)ifp->mac_addr, mac_addr, ETH_ALEN);
 
 	WLAND_DBG(DEFAULT, TRACE, "Done, pid:%x, if:%s (%pM) created ===\n",
 		current->pid, ifp->ndev->name, ifp->mac_addr);
@@ -946,8 +950,7 @@ void wland_del_if(struct wland_private *drvr, s32 bssidx)
 		return;
 	}
 
-	WLAND_DBG(DEFAULT, TRACE, "Enter,idx:%d,ifidx:%d,ndev:%p.\n", bssidx,
-		ifp->ifidx, ifp->ndev);
+	WLAND_ERR("Enter,idx:%d,ifidx:%d,ndev:%p.\n", bssidx, ifp->ifidx, ifp->ndev);
 
 	if (ifp->ndev) {
 		if (bssidx == 0) {
@@ -981,6 +984,7 @@ void wland_del_if(struct wland_private *drvr, s32 bssidx)
 		drvr->iflist[bssidx] = NULL;
 		if (bssidx == 0 && drvr->config && !IS_ERR(drvr->config))
 			cfg80211_detach(drvr->config);
+		
 	} else {
 		drvr->iflist[bssidx] = NULL;
 		kfree(ifp);
@@ -1007,6 +1011,7 @@ static void wland_driver_init(struct work_struct *work)
 	wland_sdio_register();
 #endif /* WLAND_SDIO_SUPPORT */
 #ifdef WLAND_USB_SUPPORT
+	printk("wland_driver_init 3\n");
 	wland_usb_register();
 #endif /* WLAND_USB_SUPPORT  */
 }
@@ -1025,20 +1030,16 @@ void wland_registration_sem_up(bool check_flag)
 	up(&registration_sem);
 }
 
-#define INSMOD_TEST 1
 
-static int wlanfmac_module_init(void)
+static int __init wlanfmac_module_init(void)
 {
-	printk("wlanfmac_module_init\n");
-	WLAND_DBG(DEFAULT, TRACE, "%s.\n", wland_ver);
-	WLAND_DBG(DEFAULT, TRACE, "Ver: %d.%d.%d.\n", WLAND_VER_MAJ,
-		WLAND_VER_MIN, WLAND_VER_BLD);
+	
+	printk("wlanfmac_module_init ver=%s Ver: %d.%d.%d.\n", wland_ver, WLAND_VER_MAJ, WLAND_VER_MIN, WLAND_VER_BLD);
+	
 
 	sema_init(&registration_sem, 0);
 
-#ifdef INSMOD_TEST
 	rda_wifi_power_on();
-#endif /*INSMOD_TEST */
 
 	wland_debugfs_init();
 
@@ -1049,8 +1050,8 @@ static int wlanfmac_module_init(void)
 	 * Wait till MMC sdio_register_driver callback called and made driver attach.
 	 * It's needed to make sync up exit from dhd insmod and Kernel MMC sdio device callback registration
 	 */
-	if ((down_timeout(&registration_sem, msecs_to_jiffies(REGISTRATION_TIMEOUT)) != 0)
-		|| (!registration_check )) {
+	if ((down_timeout(&registration_sem, msecs_to_jiffies(REGISTRATION_TIMEOUT)) != 0) || (!registration_check ))
+	{
 		WLAND_ERR("sdio_register_driver timeout or error\n");
 		cancel_work_sync(&wland_driver_work);
 

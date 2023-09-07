@@ -27,10 +27,11 @@
 #include <asm/io.h>
 #include <linux/debugfs.h>
 #include <linux/mutex.h>
+#include <linux/of_device.h>
 
-#include <plat/md_sys.h>
-#include <plat/reg_cfg_regs.h>
-#include <plat/cpu.h>
+#include <rda/plat/md_sys.h>
+#include <rda/plat/reg_cfg_regs.h>
+#include <rda/plat/cpu.h>
 
 #include <rda/tgt_ap_board_config.h>
 
@@ -451,7 +452,7 @@ static void rda_msys_get_version(char *buf, size_t len,
 {
 	u32 rev = ver->revision;
 
-	memset(buf, len, 0);
+	memset(buf, 0, len);
 
 	if (rev & 0x80000000) {
 		/* It is a svn's revision*/
@@ -510,11 +511,11 @@ static int md_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, md_proc_show, NULL);
 }
 
-static const struct file_operations md_proc_ops = {
-	.open = md_proc_open,
-	.read	= seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
+static const struct proc_ops md_proc_ops = {
+	.proc_open = md_proc_open,
+	.proc_read	= seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
 
 /*====================================================================*/
@@ -558,11 +559,11 @@ static int rfcalib_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, rfcalib_proc_show, NULL);
 }
 
-static const struct file_operations rfcalib_proc_ops = {
-	.open = rfcalib_proc_open,
-	.read	= seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
+static const struct proc_ops rfcalib_proc_ops = {
+	.proc_open = rfcalib_proc_open,
+	.proc_read	= seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
 #endif /* CONFIG_PROC_FS */
 
@@ -976,7 +977,6 @@ static int rda_msys_probe(struct platform_device *pdev)
 		BUG();
 		return -ENOMEM;
 	}
-
 	gmsys = pmsys;
 	pmsys->dev = pdev->dev;
 
@@ -989,7 +989,6 @@ static int rda_msys_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		goto err_handle_slot;
 	}
-
 	/* Init work of rx and create workqueue of rx. */
 	ret = rda_msys_init_rx_queue(pmsys);
 	if (ret < 0) {
@@ -1003,7 +1002,6 @@ static int rda_msys_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&pmsys->rx_pending_list);
 
 	pmsys->running = true;
-
 	/* Open sys channel and attach rx's callback function. */
 	ret = rda_md_open(MD_PORT_SYS, &pmsys->port, pmsys, rda_msys_rx_notify);
 	if (ret < 0) {
@@ -1017,14 +1015,13 @@ static int rda_msys_probe(struct platform_device *pdev)
 
 	pmsys->version = rda_md_query_ver(pmsys->port);
 
-	memset(&gbp_info, sizeof(gbp_info), 0);
+	memset(&gbp_info, 0, sizeof(gbp_info));
 	gmsys_dev = rda_msys_alloc_device();
 	if (!gmsys_dev) {
 		pr_err("rda_msys: can not allocate msys device!\n");
 		ret = -ENOMEM;
 		goto err_handle_msys;
 	}
-
 #ifndef CONFIG_RDA_FPGA
 	rda_msys_register_device(gmsys_dev);
 
@@ -1035,10 +1032,10 @@ static int rda_msys_probe(struct platform_device *pdev)
 	cmd_set.data_size = 0;
 	cmd_set.pout_data = &gbp_info;
 	cmd_set.out_size = sizeof(gbp_info);
-
+	dev_info(&pdev->dev, "pmsys_dev = %08x gbp_info =  %08x", cmd_set.pmsys_dev, cmd_set.pout_data);
 	sys_ret = rda_msys_send_cmd(&cmd_set);
 	if (sys_ret) {
-		pr_err("rda_msys: can not get info of bp!\n");
+		dev_err(&pdev->dev, "rda_msys: can not get info of bp!\n");
 		ret = -EINVAL;
 		goto err_handle_cmd;
 	}
@@ -1052,18 +1049,17 @@ static int rda_msys_probe(struct platform_device *pdev)
 	cmd_set.data_size = 0;
 	cmd_set.pout_data = gcalib_info;
 	cmd_set.out_size = sizeof(gcalib_info);
-
 	sys_ret = rda_msys_send_cmd(&cmd_set);
 	if (sys_ret) {
-		pr_err("rda_msys: can not get info of calibration!\n");
+		dev_err(&pdev->dev, "rda_msys: can not get info of calibration!\n");
 	}
 	if (gcalib_info[0] >= RDA_CALIB_STATUS_QTY) {
-		pr_err("rda_msys: Invalid RF calib status: %d\n",
+		dev_err(&pdev->dev, "rda_msys: Invalid RF calib status: %d\n",
 				gcalib_info[0]);
 		gcalib_info[0] = RDA_CALIB_STATUS_QTY - 1;
 	}
 	if (gcalib_info[1] >= RDA_CALIB_STATUS_QTY) {
-		pr_err("rda_msys: Invalid audio calib status: %d\n",
+		dev_err(&pdev->dev, "rda_msys: Invalid audio calib status: %d\n",
 				gcalib_info[1]);
 		gcalib_info[1] = RDA_CALIB_STATUS_QTY - 1;
 	}
@@ -1073,16 +1069,16 @@ static int rda_msys_probe(struct platform_device *pdev)
 	rda_msys_fill_version();
 
 	for (i = 0; i < RDA_MOD_QTY; i++)
-		pr_info("%s\n", gbp_mod_ver[i]);
-	pr_info("Built on %s\n", gbp_info.build_time);
-	pr_info("------------------\n");
-	pr_info("RF   : %s\n",
+		dev_info(&pdev->dev,"%s\n", gbp_mod_ver[i]);
+	dev_info(&pdev->dev, "Built on %s\n", gbp_info.build_time);
+	dev_info(&pdev->dev, "------------------\n");
+	dev_info(&pdev->dev, "RF   : %s\n",
 			gcalib_status[gcalib_info[0]]);
-	pr_info("Audio: %s\n",
+	dev_info(&pdev->dev, "Audio: %s\n",
 			gcalib_status[gcalib_info[1]]);
 #endif /* CONFIG_RDA_FPGA */
 
-	pr_info("rda_msys: msys initialized\n");
+	dev_info(&pdev->dev, "rda_msys: msys initialized\n");
 
 	return ret;
 
@@ -1110,11 +1106,17 @@ err_handle_slot:
 	return ret;
 }
 
+static const struct of_device_id rda_msys_dt_matches[] = {
+	{ .compatible = "rda,8810pl-rda_msys" },
+	{ }
+};
+
 static struct platform_driver rda_msys_driver = {
 	.probe = rda_msys_probe,
 	.driver = {
 		.name = RDA_MSYS_DRV_NAME,
 		.owner = THIS_MODULE,
+		.of_match_table = rda_msys_dt_matches,
 	},
 };
 

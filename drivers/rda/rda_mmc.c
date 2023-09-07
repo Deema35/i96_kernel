@@ -15,24 +15,26 @@
 #include <linux/mmc/sd.h>
 #include <linux/mmc/sdio.h>
 #include <linux/io.h>
-#include <asm/sizes.h>
+#include <linux/sizes.h>
+#include <linux/dev_printk.h>
+#include <linux/gpio/driver.h>
 
-#include <mach/hardware.h>
-#include <mach/irqs.h>
-#include <mach/ifc.h>
-#include <mach/timex.h>
-#include <plat/devices.h>
-#include <plat/reg_ifc.h>
-#include <plat/rda_debug.h>
-#include <plat/reg_mmc.h>
+
+#include <rda/mach/hardware.h>
+//#include <rda/mach/irqs.h>
+#include <rda/mach/ifc.h>
+#include <rda/mach/timex.h>
+#include <rda/plat/devices.h>
+#include <rda/plat/reg_ifc.h>
+#include <rda/plat/reg_mmc.h>
 #include <linux/gpio.h>
 
 #include <linux/regulator/consumer.h>
-#include <mach/regulator.h>
-#include <mach/rda_clk_name.h>
-#include <mach/iomap.h>
-#include <plat/reg_sysctrl.h>
-#include <plat/cpu.h>
+#include <rda/mach/regulator.h>
+#include <rda/mach/rda_clk_name.h>
+#include <rda/mach/gpio_id.h>
+#include <rda/plat/reg_sysctrl.h>
+#include <rda/plat/cpu.h>
 
 #include <asm/irq.h>
 #include <linux/irq.h>
@@ -51,6 +53,8 @@
 #define MCD_DATA_TIMEOUT_MS 	( 5000 )
 #define RDA_MMC_HOST_COUNT 	( 4 )
 
+
+
 typedef struct
 {
 	u8* sysMemAddr;
@@ -66,7 +70,7 @@ struct rda_mmc_host {
 	struct mmc_request	*mrq;
 	struct mmc_command	*cmd;
 	struct mmc_data *data;
-
+	
 	spinlock_t		lock;
 	void __iomem		*base;		/* virtual */
 	int 		irq;
@@ -83,6 +87,7 @@ struct rda_mmc_host {
 	u8 sys_suspend;
 	u8 sdio_irq_enable;
 	u8 eirq_enable;
+	u8 detpin_enable;
 	int eirq;
 	int id;
 	struct tasklet_struct	finish_tasklet;
@@ -95,8 +100,8 @@ struct rda_mmc_host {
 	unsigned long bus_width;
 
 	int clk_inv;
-
-	int det_pin;
+	struct gpio_desc* eirq_pin;
+	struct gpio_desc* det_pin;
 	int present;
 
 	struct delayed_work timeout_work;
@@ -121,8 +126,9 @@ static void hal_set_bus_width(struct rda_mmc_host *host,
 				unsigned char bus_width);
 static int hal_mmc_init(struct rda_mmc_host *host);
 
-static void hal_send_cmd(struct rda_mmc_host *host,
-				struct mmc_command *cmd, struct mmc_data *data)
+static HWP_SYS_CTRL_AP_T *hwp_apSysCtrl = NULL;
+
+static void hal_send_cmd(struct rda_mmc_host *host, struct mmc_command *cmd, struct mmc_data *data)
 {
 	HWP_SDMMC_T *hwp_sdmmc = (HWP_SDMMC_T*)host->base;
 	u32 configReg = 0;
@@ -131,7 +137,9 @@ static void hal_send_cmd(struct rda_mmc_host *host,
 	hwp_sdmmc->SDMMC_CONFIG = 0x00000000;
 
 	configReg = SDMMC_SDMMC_SENDCMD;
-	if (cmd->flags & MMC_RSP_PRESENT) {
+	
+	if (cmd->flags & MMC_RSP_PRESENT)
+	{
 		configReg |= SDMMC_RSP_EN;
 		if (cmd->flags & MMC_RSP_136)
 			configReg |= SDMMC_RSP_SEL_R2;
@@ -157,9 +165,11 @@ static void hal_send_cmd(struct rda_mmc_host *host,
 			 * */
 			configReg |= SDMMC_AUTO_FLAG_EN;
 		}
-	} else if (cmd->opcode == MMC_WRITE_BLOCK) {
-		configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_WRITE);
-	} else if (cmd->opcode == MMC_WRITE_MULTIPLE_BLOCK) {
+	} 
+	else if (cmd->opcode == MMC_WRITE_BLOCK)
+		{ configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_WRITE); } 
+	
+	else if (cmd->opcode == MMC_WRITE_MULTIPLE_BLOCK) {
 		configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_WRITE |
 				SDMMC_S_M_SEL_MULTIPLE);
 
@@ -172,18 +182,21 @@ static void hal_send_cmd(struct rda_mmc_host *host,
 		configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_READ);
 	} else if (cmd->opcode == MMC_SWITCH && data) {
 		configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_READ);
-	} else if(cmd->opcode == MMC_SEND_EXT_CSD && data) {
+	} 
+	else if(cmd->opcode == MMC_SEND_EXT_CSD && data)
+	{
 		configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_READ);
-	} else if(cmd->opcode == SD_IO_RW_EXTENDED) {
-		if (cmd->data->flags & MMC_DATA_WRITE)
-			configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_WRITE);
-		else
-			configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_READ);
+	} 
+	else if(cmd->opcode == SD_IO_RW_EXTENDED)
+	{
+		if (cmd->data->flags & MMC_DATA_WRITE) configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_WRITE);
+		
+		else configReg |= (SDMMC_RD_WT_EN | SDMMC_RD_WT_SEL_READ);
 
-		if(cmd->data->blocks > 1)
-			configReg |= SDMMC_S_M_SEL_MULTIPLE;
+		if(cmd->data->blocks > 1) configReg |= SDMMC_S_M_SEL_MULTIPLE;
 
-		if(transfer->blockSize != data->blksz){
+		if(transfer->blockSize != data->blksz)
+		{
 		   cmd->arg &= 0xfffffe00;
 			cmd->arg |= transfer->blockSize;
 		}
@@ -200,15 +213,15 @@ static int hal_cmd_done(struct rda_mmc_host *host)
 	return (!(hwp_sdmmc->SDMMC_STATUS & SDMMC_NOT_SDMMC_OVER));
 }
 
-static int hal_wait_cmd_done(struct rda_mmc_host *host,
-				struct mmc_command *cmd)
+static int hal_wait_cmd_done(struct rda_mmc_host *host, struct mmc_command *cmd)
 {
 	unsigned long timeout = jiffies + msecs_to_jiffies(MCD_CMD_TIMEOUT_MS);
 
 	/* command done need be polled, no interrupt indicating cmd done */
 	while (time_before(jiffies, timeout) && !hal_cmd_done(host));
 
-	if (!hal_cmd_done(host)) {
+	if (!hal_cmd_done(host))
+	{
 		dev_err(mmc_dev(host->mmc), "cmd %d timeout\n", cmd->opcode);
 		return -ETIMEDOUT;
 	}
@@ -309,10 +322,10 @@ static int hal_data_transfer_start(struct rda_mmc_host *host,
 		dev_err(mmc_dev(host->mmc), "transfer start with invalide channel\n");
 		return -EILSEQ;
 	}
-	else{
-		rda_dbg_mmc("start channel %d\n", (int)transfer->channel);
-		return 0;
-	}
+	else return 0;
+		
+		
+	
 }
 
 static void hal_data_transfer_stop(struct rda_mmc_host *host,
@@ -325,7 +338,7 @@ static void hal_data_transfer_stop(struct rda_mmc_host *host,
 	hwp_sdmmc->SDMMC_BLOCK_CNT	= SDMMC_SDMMC_BLOCK_CNT(0);
 	hwp_sdmmc->SDMMC_BLOCK_SIZE = SDMMC_SDMMC_BLOCK_SIZE(0);
 
-	rda_dbg_mmc("stop channel %d\n", (int)transfer->channel);
+	dev_info(mmc_dev(host->mmc),"stop channel %d\n", (int)transfer->channel);
 
 	if (transfer->channel == HAL_UNKNOWN_CHANNEL
 		|| transfer->channel >= SYS_IFC_STD_CHAN_NB) {
@@ -392,7 +405,7 @@ static int hal_data_transfer_done(struct rda_mmc_host *host,
 		hwp_sdmmc->SDMMC_INT_CLEAR = SDMMC_DAT_OVER_CL;
 		ifc_transfer_stop(transfer->ifcReq, transfer->channel);
 
-		rda_dbg_mmc("release channel %d\n", (int)transfer->channel);
+		dev_info(mmc_dev(host->mmc), "release channel %d\n", (int)transfer->channel);
 
 		// We finished a read
 		transfer->channel = HAL_UNKNOWN_CHANNEL;
@@ -502,7 +515,7 @@ static int do_data_abort(struct rda_mmc_host *host)
 	HAL_SDMMC_TRANSFER_T *transfer = &host->data_transfer;
 	struct mmc_data *data = host->data;
 
-	rda_dbg_mmc("do_data_abort\n");
+	dev_info(mmc_dev(host->mmc), "do_data_abort\n");
 
 	hal_data_transfer_stop(host, transfer);
 
@@ -523,7 +536,7 @@ static int do_data_complete(struct rda_mmc_host *host)
 	HAL_SDMMC_TRANSFER_T *transfer = &host->data_transfer;
 	struct mmc_data *data = host->data;
 
-	rda_dbg_mmc("host id:%d do_data_complete \n", host->id);
+	//dev_info(mmc_dev(host->mmc), "host id:%d do_data_complete \n", host->id);
 
 	if (!data || transfer->channel == HAL_UNKNOWN_CHANNEL
 		|| transfer->channel >= SYS_IFC_STD_CHAN_NB) {
@@ -534,7 +547,7 @@ static int do_data_complete(struct rda_mmc_host *host)
 
 	if (ifc_transfer_get_tc(transfer->ifcReq, transfer->channel) == 0) {
 		ifc_transfer_stop(transfer->ifcReq, transfer->channel);
-		rda_dbg_mmc("release channel %d\n", (int)transfer->channel);
+		//dev_info(mmc_dev(host->mmc), "release channel %d\n", (int)transfer->channel);
 		transfer->channel = HAL_UNKNOWN_CHANNEL;
 	}
 	else {
@@ -588,7 +601,7 @@ static irqreturn_t rda_mmc_irq(int irq, void *dev_id)
 	int_status = hal_irq_get_status(host);
 	hal_irq_clear(host, int_status);
 
-	rda_dbg_mmc("rda_mmc_irq, int_status = 0x%08x\n", int_status);
+	//dev_info(mmc_dev(host->mmc), "rda_mmc_irq, int_status = 0x%08x\n", int_status);
 
 	/* If there isn't card, we return immediately. */
 	if (!host->present) {
@@ -622,8 +635,8 @@ static irqreturn_t rda_mmc_irq(int irq, void *dev_id)
 		}
 	}
 
-	if ((int_status & SDMMC_SDIO_INT) && host->sdio_irq_enable
-			&& !host->eirq_enable) {
+	if ((int_status & SDMMC_SDIO_INT) && host->sdio_irq_enable && !host->eirq_enable)
+	{
 		mmc_signal_sdio_irq(mmc);
 	}
 
@@ -644,32 +657,33 @@ static inline void finish_request(struct rda_mmc_host *host, struct mmc_request 
 }
 
 /* send command to the mmc card and wait for results */
-static int do_command(struct mmc_host *mmc,
-				struct mmc_command *cmd,
-				struct mmc_data *data)
+
+static int do_command(struct mmc_host *mmc, struct mmc_command *cmd, struct mmc_data *data)
 {
 	int result;
 	struct rda_mmc_host *host = mmc_priv(mmc);
 
-	rda_dbg_mmc("do_command, cmdidx = %d, cmdarg = 0x%08x, flags = %x\n",
-		cmd->opcode, cmd->arg, cmd->flags);
+	//dev_info(mmc_dev(host->mmc), "do_command, cmdidx = %d, cmdarg = 0x%08x, flags = %x\n", cmd->opcode, cmd->arg, cmd->flags);
 
 	host->cmd = cmd;
 	hal_send_cmd(host, cmd, data);
 	result = hal_wait_cmd_done(host, cmd);
-	if (result) {
+	
+	if (result)
+	{
 		result = (host->present == 0) ? -ENOMEDIUM : result;
 		cmd->error = result;
 
-		dev_err(mmc_dev(host->mmc), "cmd %d, wait cmd fail, ret = %d\n",
-				cmd->opcode, result);
+		dev_err(mmc_dev(host->mmc), "cmd %d, wait cmd fail, ret = %d\n", cmd->opcode, result);
 
 		return result;
 	}
 
-	if (cmd->flags & MMC_RSP_PRESENT){
+	if (cmd->flags & MMC_RSP_PRESENT)
+	{
 		result= hal_wait_cmd_resp(host);
-		if (result) {
+		if (result)
+		{
 			result = (host->present == 0) ? -ENOMEDIUM : result;
 			cmd->error = result;
 
@@ -682,19 +696,15 @@ static int do_command(struct mmc_host *mmc,
 	}
 	hal_get_resp(host, cmd);
 
-	if (cmd->flags & MMC_RSP_PRESENT) {
-		rda_dbg_mmc("  response: %08x %08x %08x %08x\n",
-			cmd->resp[0], cmd->resp[1],
-			cmd->resp[2], cmd->resp[3]);
+	if (cmd->flags & MMC_RSP_PRESENT)
+	{
+		//dev_info(mmc_dev(host->mmc), "  response: %08x %08x %08x %08x\n", cmd->resp[0], cmd->resp[1], cmd->resp[2], cmd->resp[3]);
 	}
 
 	return result;
 }
 
-static int __do_data_transfer(struct mmc_host *mmc,
-	struct mmc_command *cmd,
-	struct mmc_data *data,
-	dma_addr_t dma_addr)
+static int __do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, struct mmc_data *data, dma_addr_t dma_addr)
 {
 	int result = 0;
 	struct rda_mmc_host *host = mmc_priv(mmc);
@@ -704,10 +714,7 @@ static int __do_data_transfer(struct mmc_host *mmc,
 	unsigned long timeout;
 #endif /* RDA_MMC_USE_INT */
 
-	rda_dbg_mmc(
-		"%s, id:%d cmdidx = %d, blks = %d, addr = 0x%08x\n",
-		__func__, host->id,cmd->opcode, data->blocks,
-		dma_addr);
+	//dev_info(mmc_dev(host->mmc),  "%s, id:%d cmdidx = %d, blks = %d, addr = 0x%08x\n", __func__, host->id,cmd->opcode, data->blocks, dma_addr);
 
 	/* Check if address of dma is aligened with 4bytes. */
 	if (!IS_ALIGNED(dma_addr, 4)) {
@@ -754,7 +761,7 @@ static int __do_data_transfer(struct mmc_host *mmc,
 	}
 
 	/* Config completion of request */
-	INIT_COMPLETION(host->req_done);
+	init_completion(&host->req_done);
 
 	result = do_command(mmc, cmd, data);
 	if (result) {
@@ -915,8 +922,7 @@ static int do_data_transfer(struct mmc_host *mmc,
 	host->data = data;
 
 	for (i = 0; i < data->sg_len; i++) {
-		rda_dbg_mmc("do_data_transfer, sg %d, size = %d\n",
-			i, data->sg[i].length);
+		//dev_info(mmc_dev(host->mmc), "do_data_transfer, sg %d, size = %d\n", i, data->sg[i].length);
 
 #if 0
 		if ((rda_debug & RDA_DBG_MMC) && (data->flags & MMC_DATA_WRITE))
@@ -1124,8 +1130,7 @@ static void rda_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			1<<host->bus_width);
 		hal_set_bus_width(host, host->bus_width);
 	}
-	rda_dbg_mmc("host:(%d)set bus_width to %d pm_mode %d \n",
-		host->id, ios->bus_width, ios->power_mode);
+	dev_info(mmc_dev(host->mmc), "host:(%d)set bus_width to %d pm_mode %d \n", host->id, ios->bus_width, ios->power_mode);
 }
 
 static void rda_mmc_mask_eirq(struct rda_mmc_host *host)
@@ -1178,8 +1183,16 @@ static int rda_mmc_get_cd(struct mmc_host *mmc)
 	int present = -ENOSYS;
 	struct rda_mmc_host *host = mmc_priv(mmc);
 
-	if (gpio_is_valid(host->det_pin)) {
-		present = !gpio_get_value(host->det_pin);
+	if (host->detpin_enable)
+	{
+		
+		
+		host->det_pin = gpiod_get(mmc_dev(host->mmc), "detpin", GPIOD_IN);
+		
+		present = !gpiod_get_value(host->det_pin);
+		
+		gpiod_put(host->det_pin);
+		
 		host->present = present;
 		dev_dbg(mmc_dev(host->mmc), "card is %s present\n", present ? "" : "not");
 
@@ -1208,7 +1221,9 @@ static irqreturn_t rda_mmc_det_irq(int irq, void *data)
 
 	/* entering this ISR means that we have configured det_pin:
 	 * we can use its value in board structure */
-	present = !gpio_get_value(host->det_pin);
+	
+	present = !gpiod_get_value(host->det_pin);
+	
 
 	/*
 	 * we expect this irq on both insert and remove,
@@ -1264,8 +1279,9 @@ static irqreturn_t rda_sdio_eirq_handler(int irq, void *dev_id)
 		return IRQ_HANDLED;
 
 	int_status = hal_irq_get_status(host);
-	if (!(int_status & SDMMC_SDIO_INT)) {
-		rda_dbg_mmc("host id : %d,int_status:%d\n", host->id, int_status);
+	if (!(int_status & SDMMC_SDIO_INT))
+	{
+		//dev_info(mmc_dev(host->mmc), "host id : %d,int_status:%d\n", host->id, int_status);
 		return IRQ_NONE;
 	}
 
@@ -1310,30 +1326,44 @@ static ssize_t rda_mmc_reset_num_show(struct device *dev,
 }
 
 static struct device_attribute rda_mmc_attributes[] = {
-	__ATTR(mmc_unalign, S_IRUGO, rda_mmc_unaligned_show, NULL),
-	__ATTR(reset_num, S_IRUGO, rda_mmc_reset_num_show, NULL),
+	__ATTR(mmc_unalign, 0444, rda_mmc_unaligned_show, NULL),
+	__ATTR(reset_num, 0444, rda_mmc_reset_num_show, NULL),
 };
+
+static u32 GetDeviceTreeProperty(struct platform_device *pdev, const char *PropertyName)
+{
+	const void *ptr;
+	
+	ptr = of_get_property(pdev->dev.of_node, PropertyName, NULL);
+
+	if (!ptr) dev_info(&pdev->dev,"Can't read %s", PropertyName);
+	
+	return be32_to_cpup(ptr);
+    
+}
+
+
 
 static int rda_mmc_probe(struct platform_device *pdev)
 {
-	struct mmc_host *mmc;
+	struct mmc_host *mmc = NULL;
 	struct rda_mmc_host *host = NULL;
 	struct resource *res;
-	int ret = 0, irq;
-	int i = pdev->id;
-	struct rda_mmc_device_data * hw= NULL;
+	int ret = 0, irq = 0;
 	unsigned long flags;
 	int index;
-
+	const char * dev_label = "rda_wlan_irq";
+	
+	hwp_apSysCtrl = (HWP_SYS_CTRL_AP_T *)ioremap(RDA_SYSCTRL_PHYS, RDA_SYSCTRL_SIZE); //for reset
+	
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	irq = platform_get_irq(pdev, 0);
 	if (res == NULL || irq < 0) {
 		return -ENXIO;
 	}
+	pdev->id = GetDeviceTreeProperty(pdev, "mmc_id");
+	dev_info(&pdev->dev, "rda_mmc_probe, %d, base = %08x, irq = %d\n", pdev->id, res->start, irq);
 
-	rda_dbg_mmc("rda_mmc_probe, %d, base = %08x, irq = %d\n", i, res->start, irq);
-
-	hw = (struct rda_mmc_device_data*)pdev->dev.platform_data;
 	mmc = mmc_alloc_host(sizeof(struct rda_mmc_host), &pdev->dev);
 	if (!mmc) {
 		return -ENOMEM;
@@ -1348,7 +1378,7 @@ static int rda_mmc_probe(struct platform_device *pdev)
 	/*
 	 * Our hardware DMA can handle a maximum of one page per SG entry.
 	 */
-	if (i == 0) {
+	if (pdev->id == 0) {
 		mmc->max_req_size = RDA_MMC0_REQ_NUM_PAGE * PAGE_SIZE;
 		mmc->max_seg_size = RDA_MMC0_REQ_NUM_PAGE * PAGE_SIZE;
 	} else {
@@ -1365,9 +1395,10 @@ static int rda_mmc_probe(struct platform_device *pdev)
 	 * Block count register is 16 bits.
 	 */
 	mmc->max_blk_count = 65535;
+	
 
 	host = mmc_priv(mmc);
-	host->id = i;
+	host->id = pdev->id;
 	host->mmc = mmc;
 	host->irq = irq;
 	host->sdio_irq_enable = 0;
@@ -1382,15 +1413,18 @@ static int rda_mmc_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto err_free_host;
 	}
+	
 
-	if (host->id == 0) {
-		host->host_reg = regulator_get(NULL, LDO_SDMMC);
+	if (host->id == 0)
+	{
+		host->host_reg = regulator_get(&pdev->dev, LDO_SDMMC);
 		if (IS_ERR(host->host_reg)) {
 			dev_err(&pdev->dev, "could not find regulator devices\n");
 			ret = PTR_ERR(host->host_reg);
 			goto err_free_reg;
 		}
 	}
+	
 
 	if (rda_soc_is_older_metal10()) {
 		dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
@@ -1405,67 +1439,96 @@ static int rda_mmc_probe(struct platform_device *pdev)
 			goto err_dma_alloc;
 		}
 	}
-
+	
+	mmc->f_min = 10000000;
+	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
+	mmc->f_max = GetDeviceTreeProperty(pdev, "max-frequency");
+	mmc->caps = GetDeviceTreeProperty(pdev, "caps");
+	mmc->pm_caps = GetDeviceTreeProperty(pdev, "pm_caps");
+	
+	host->det_pin = gpiod_get(&pdev->dev, "detpin", GPIOD_IN);
+	
+	host->detpin_enable = false;
+	
+	if (IS_ERR(host->det_pin))
+	{
+		dev_err(&pdev->dev, "have not det pin\n");
+		
+	}
+	else
+	{
+		host->detpin_enable = true;
+	
+		
+	}
+	
+	host->eirq_pin = gpiod_get(&pdev->dev, "eirqpin", GPIOD_IN);
+	
+	host->eirq_enable = false;
+	
+	if (IS_ERR(host->eirq_pin))
+	{
+		dev_err(&pdev->dev, "have not eirq pin\n");
+		
+	}
+	else 
+	{
+		host->eirq_enable = true;
+		
+	}
+	
+	host->sys_suspend = GetDeviceTreeProperty(pdev, "sys_suspend");
+	host->clk_inv = GetDeviceTreeProperty(pdev, "clk_inv");
+	host->mclk_adj = GetDeviceTreeProperty(pdev, "mclk_adj");
 	/*
 	 * Calculate minimum clock rate, rounding up.
 	 */
-	mmc->f_min = hw->f_min;
-	mmc->f_max = hw->f_max;
-	mmc->ocr_avail = hw->ocr_avail;
-	mmc->caps = hw->caps;
-	mmc->pm_caps = hw->pm_caps;
-
-	host->eirq_enable = hw->eirq_enable;
-	host->det_pin = hw->det_pin;
-	host->sys_suspend = hw->sys_suspend;
-
 	hal_mmc_init(host);
-	host->id = i;
-	host->clk_inv = hw->clk_inv;
-
+	host->id = pdev->id;
 	hal_set_bus_width(host, 0);
 	host->bus_width = 0;
-
 	spin_lock_init(&host->lock);
-
-	host->master_clk = clk_get(NULL, RDA_CLK_APB2);
-	if (!host->master_clk) {
+	
+	host->master_clk = clk_get(&pdev->dev, NULL);
+	
+	if (IS_ERR(host->master_clk)) {
 		dev_err(&pdev->dev, "no handler of clock\n");
 		ret = -EINVAL;
 		goto err_free_reg;
 	}
 	host->clock = 0;
-	host->mclk_adj = hw->mclk_adj;
-
+	
 	ret = clk_prepare_enable(host->master_clk);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "do not enable the specified clock\n");
 		goto err_clk;
 	}
 
-#ifdef RDA_MMC_USE_INT
+
 	tasklet_init(&host->finish_tasklet, tasklet_worker, (unsigned long)host);
 
 	/* Request IRQ for MMC operations */
-	ret = request_irq(host->irq, rda_mmc_irq, IRQF_DISABLED,
-						mmc_hostname(mmc), host);
+	ret = request_irq(host->irq, rda_mmc_irq, 0x0, mmc_hostname(mmc), host);
 	if (ret) {
-		dev_err(&pdev->dev, "unable to request IRQ\n");
+		dev_err(&pdev->dev, "unable to request IRQ ERR = %d\n", ret);
+		return ret;
 		goto out;
 	}
-#endif
-
-	if (host->eirq_enable){
-		ret = gpio_request(hw->eirq_gpio, hw->dev_label);
-		if (ret) {
-			dev_err(&pdev->dev, "unable to request IRQ\n");
+	
+	if (host->eirq_enable)
+	{
+		ret = gpiod_direction_input(host->eirq_pin);
+		
+		if (IS_ERR((void*)ret))
+		{
+			dev_err(&pdev->dev, "unable to request eirq IRQ\n");
 			goto out;
 		}
-		gpio_direction_input(hw->eirq_gpio);
-		host->eirq = gpio_to_irq(hw->eirq_gpio);
+		
+		host->eirq = gpiod_to_irq(host->eirq_pin);
 
-		ret =  request_irq(host->eirq, rda_sdio_eirq_handler,
-				hw->eirq_sense,hw->dev_label, host);
+		ret =  request_irq(host->eirq, rda_sdio_eirq_handler, IRQF_TRIGGER_LOW | IRQF_NO_SUSPEND, dev_label, host);
+		
 		if (ret)
 			dev_err(&pdev->dev, "request_irq sd eirq failed \n");
 		else{
@@ -1474,24 +1537,25 @@ static int rda_mmc_probe(struct platform_device *pdev)
 			spin_unlock_irqrestore(&host->lock, flags);
 		}
 	}
+	
 
-	if (gpio_is_valid(host->det_pin)) {
-		ret = gpio_request(host->det_pin, "mmc_detect");
-		if (ret < 0) {
-			dev_warn(&pdev->dev, "couldn't claim card detect pin\n");
-		} else {
-			gpio_direction_input(host->det_pin);
-
-			ret = request_irq(gpio_to_irq(host->det_pin),
-				rda_mmc_det_irq,
-				IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
-				mmc_hostname(mmc),
-				host);
-			if (ret) {
+	if (host->detpin_enable)
+	{
+		ret = gpiod_direction_input(host->det_pin);
+		if (!IS_ERR((void*)ret))
+		{
+			ret = request_irq(gpiod_to_irq(host->det_pin), rda_mmc_det_irq, IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND, mmc_hostname(mmc), host);
+			
+			if (ret)
+			{
 				dev_warn(&pdev->dev, "request MMC detect irq failed\n");
 			}
 		}
+		else dev_warn(&pdev->dev,"det pin fail\n");
+		
 	}
+	
+	
 
 	/* Just for sdio host. */
 	if (host->id == 1) {
@@ -1507,17 +1571,21 @@ static int rda_mmc_probe(struct platform_device *pdev)
 	}
 
 	/* If success, we put host to a global array. */
-	if (i < RDA_MMC_HOST_COUNT) {
-		mmc_host_p[i] = host;
+	if (pdev->id < RDA_MMC_HOST_COUNT) {
+		mmc_host_p[pdev->id] = host;
 	}
 
 	host->unaligned_count = 0;
-	for (index = 0; index < ARRAY_SIZE(rda_mmc_attributes); index++) {
+	for (index = 0; index < ARRAY_SIZE(rda_mmc_attributes); index++)
+	{
 		device_create_file(&pdev->dev, &rda_mmc_attributes[index]);
 	}
 
-	dev_info(&pdev->dev, "rda_sdmmc %d initialized.\n", i);
-
+	dev_info(&pdev->dev, "rda_sdmmc %d initialized.\n", pdev->id);
+	
+	
+	if (host->eirq_enable) gpiod_put(host->eirq_pin);
+	if (host->detpin_enable) gpiod_put(host->det_pin);
 	return 0;
 
 out:
@@ -1559,6 +1627,9 @@ err_free_host:
 	if (mmc) {
 		mmc_free_host(mmc);
 	}
+	
+	if (host->eirq_enable) gpiod_put(host->eirq_pin);
+	if (host->detpin_enable) gpiod_put(host->det_pin);
 
 	return ret;
 }
@@ -1568,6 +1639,7 @@ static int rda_mmc_remove(struct platform_device *pdev)
 	struct mmc_host *mmc = platform_get_drvdata(pdev);
 
 	platform_set_drvdata(pdev, NULL);
+	
 
 	if (mmc) {
 		struct rda_mmc_host *host = mmc_priv(mmc);
@@ -1596,9 +1668,10 @@ static int rda_mmc_remove(struct platform_device *pdev)
 			free_irq(host->eirq, host);
 		}
 
-		if (gpio_is_valid(host->det_pin)) {
-			free_irq(gpio_to_irq(host->det_pin), host);
-			gpio_free(host->det_pin);
+		if (host->det_pin)
+		{
+			free_irq(gpiod_to_irq(host->det_pin), host);
+			gpiod_put(host->det_pin);
 		}
 
 		if (host->tmp_buf) {
@@ -1641,7 +1714,7 @@ void rda_mmc_set_sdio_irq(u32 host_id, u8 enable)
 
 static void rda_mmc_reset(u32 host_id)
 {
-	static HWP_SYS_CTRL_AP_T *hwp_apSysCtrl = (HWP_SYS_CTRL_AP_T *)RDA_SYSCTRL_BASE;
+	//static HWP_SYS_CTRL_AP_T *hwp_apSysCtrl = (HWP_SYS_CTRL_AP_T *)RDA_SYSCTRL_BASE;
 
 	if (host_id > 2) {
 		return;
@@ -1669,7 +1742,7 @@ void rda_mmc_bus_scan(u32 host_id)
 
 #ifdef CONFIG_PM
 	if (host->suspend) {
-		mmc_resume_host(host->mmc);
+		
 		host->suspend = 0;
 	} else {
 		mmc_detect_change(host->mmc, msecs_to_jiffies(50));
@@ -1690,14 +1763,14 @@ static int rda_mmc_suspend(struct platform_device *dev, pm_message_t state)
 		host = (struct rda_mmc_host*)mmc_priv(mmc);
 		if (host) {
 
-			rda_dbg_mmc("host:(%d) rda_mmc_suspend \n",host->id);
+			dev_info(mmc_dev(host->mmc), "host:(%d) rda_mmc_suspend \n",host->id);
 
 			if (!host->sys_suspend) {
 				return ret;
 			}
 
 			if (!host->suspend) {
-				ret = mmc_suspend_host(mmc);
+				
 				clk_disable(host->master_clk);
 			}
 
@@ -1725,7 +1798,7 @@ static int rda_mmc_resume(struct platform_device *dev)
 	if (mmc) {
 		host = (struct rda_mmc_host*)mmc_priv(mmc);
 		if (host) {
-			rda_dbg_mmc("host:(%d) rda_mmc_resume \n",host->id);
+			dev_info(mmc_dev(host->mmc), "host:(%d) rda_mmc_resume \n",host->id);
 
 			if (!host->sys_suspend) {
 				return ret;
@@ -1740,7 +1813,7 @@ static int rda_mmc_resume(struct platform_device *dev)
 
 			if (host->suspend) {
 				clk_enable(host->master_clk);
-				ret = mmc_resume_host(mmc);
+				
 			} else {
 				mmc_detect_change(host->mmc, msecs_to_jiffies(50));
 			}
@@ -1755,6 +1828,12 @@ static int rda_mmc_resume(struct platform_device *dev)
 #define rda_mmc_resume	NULL
 #endif
 
+static const struct of_device_id rda_mmc_dt_matches[] = {
+	{ .compatible = "rda,8810pl-mmc" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, rda_mmc_dt_matches);
+
 static struct platform_driver rda_mmc_driver = {
 	.probe		= rda_mmc_probe,
 	.remove 	= rda_mmc_remove,
@@ -1763,14 +1842,14 @@ static struct platform_driver rda_mmc_driver = {
 	.driver 	= {
 		.name	= RDA_MMC_DRV_NAME,
 		.owner	= THIS_MODULE,
+		.of_match_table = rda_mmc_dt_matches,
 	},
 };
 
 static int __init rda_mmc_init(void)
 {
-	int ret;
-	ret = platform_driver_register(&rda_mmc_driver);
-	return ret;
+	return platform_driver_register(&rda_mmc_driver);
+
 }
 
 static void __exit rda_mmc_exit(void)

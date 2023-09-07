@@ -426,54 +426,54 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 	WLAND_DBG(DEFAULT, TRACE, "Android private cmd \"%s\" on %s\n", command,
 		ifr->ifr_name);
 
-	if (strnicmp(command, CMD_START, strlen(CMD_START)) == 0) {
+	if (strncasecmp(command, CMD_START, strlen(CMD_START)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular Start command\n");
 #if 0
 		bytes_written = wl_android_wifi_on(net);
 #endif
-	} else if (strnicmp(command, CMD_SETFWPATH, strlen(CMD_SETFWPATH)) == 0) {
+	} else if (strncasecmp(command, CMD_SETFWPATH, strlen(CMD_SETFWPATH)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular Set_fwpath command\n");
-	} else if (strnicmp(command, CMD_STOP, strlen(CMD_STOP)) == 0) {
+	} else if (strncasecmp(command, CMD_STOP, strlen(CMD_STOP)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular Stop command\n");
 #if 0
 		bytes_written = wl_android_wifi_off(net);
 #endif
-	} else if (strnicmp(command, CMD_SCAN_ACTIVE,
+	} else if (strncasecmp(command, CMD_SCAN_ACTIVE,
 			strlen(CMD_SCAN_ACTIVE)) == 0) {
 		/*
 		 * TBD: SCAN-ACTIVE
 		 */
 		 WLAND_DBG(DEFAULT, INFO, "Received regular SCAN_ACTIVE command\n");
-	} else if (strnicmp(command, CMD_SCAN_PASSIVE,
+	} else if (strncasecmp(command, CMD_SCAN_PASSIVE,
 			strlen(CMD_SCAN_PASSIVE)) == 0) {
 		/*
 		 * TBD: SCAN-PASSIVE
 		 */
 		  WLAND_DBG(DEFAULT, INFO, "Received regular SCAN_PASSIVE command\n");
-	} else if (strnicmp(command, CMD_RSSI, strlen(CMD_RSSI)) == 0) {
+	} else if (strncasecmp(command, CMD_RSSI, strlen(CMD_RSSI)) == 0) {
 		bytes_written =
 			wl_android_get_rssi(net, command, priv_cmd.total_len);
 		WLAND_DBG(DEFAULT, INFO, "Received regular RSSI command\n");
-	} else if (strnicmp(command, CMD_LINKSPEED, strlen(CMD_LINKSPEED)) == 0) {
+	} else if (strncasecmp(command, CMD_LINKSPEED, strlen(CMD_LINKSPEED)) == 0) {
 		bytes_written =
 			wl_android_get_link_speed(net, command,
 			priv_cmd.total_len);
 		WLAND_DBG(DEFAULT, INFO, "Received regular LINKSPEED command\n");
 	}
 #ifdef PKT_FILTER_SUPPORT
-	else if (strnicmp(command, CMD_RXFILTER_START,
+	else if (strncasecmp(command, CMD_RXFILTER_START,
 			strlen(CMD_RXFILTER_START)) == 0) {
 		bytes_written = net_os_enable_packet_filter(net, 1);
-	} else if (strnicmp(command, CMD_RXFILTER_STOP,
+	} else if (strncasecmp(command, CMD_RXFILTER_STOP,
 			strlen(CMD_RXFILTER_STOP)) == 0) {
 		bytes_written = net_os_enable_packet_filter(net, 0);
-	} else if (strnicmp(command, CMD_RXFILTER_ADD,
+	} else if (strncasecmp(command, CMD_RXFILTER_ADD,
 			strlen(CMD_RXFILTER_ADD)) == 0) {
 		int filter_num =
 			*(command + strlen(CMD_RXFILTER_ADD) + 1) - '0';
 		bytes_written =
 			net_os_rxfilter_add_remove(net, true, filter_num);
-	} else if (strnicmp(command, CMD_RXFILTER_REMOVE,
+	} else if (strncasecmp(command, CMD_RXFILTER_REMOVE,
 			strlen(CMD_RXFILTER_REMOVE)) == 0) {
 		int filter_num =
 			*(command + strlen(CMD_RXFILTER_REMOVE) + 1) - '0';
@@ -481,19 +481,19 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 			net_os_rxfilter_add_remove(net, FALSE, filter_num);
 	}
 #endif /* PKT_FILTER_SUPPORT */
-	else if (strnicmp(command, CMD_BTCOEXSCAN_START,
+	else if (strncasecmp(command, CMD_BTCOEXSCAN_START,
 			strlen(CMD_BTCOEXSCAN_START)) == 0) {
 		/*
 		 * TBD: BTCOEXSCAN-START
 		 */
 		 WLAND_DBG(DEFAULT, INFO, "Received regular BTCOEXSCAN_START command\n");
-	} else if (strnicmp(command, CMD_BTCOEXSCAN_STOP,
+	} else if (strncasecmp(command, CMD_BTCOEXSCAN_STOP,
 			strlen(CMD_BTCOEXSCAN_STOP)) == 0) {
 		/*
 		 * TBD: BTCOEXSCAN-STOP
 		 */
 		  WLAND_DBG(DEFAULT, INFO, "Received regular BTCOEXSCAN_STOP command\n");
-	} else if (strnicmp(command, CMD_BTCOEXMODE,
+	} else if (strncasecmp(command, CMD_BTCOEXMODE,
 			strlen(CMD_BTCOEXMODE)) == 0) {
 			WLAND_DBG(DEFAULT, INFO, "Received regular BTCOEXMODE command\n");
 #ifdef WLAND_CFG80211_SUPPORT
@@ -510,26 +510,26 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 			net_os_enable_packet_filter(net, 1);	/* DHCP ends */
 #endif /* PKT_FILTER_SUPPORT */
 #endif /* WLAND_CFG80211_SUPPORT */
-	} else if (strnicmp(command, CMD_SETSUSPENDOPT,
+	} else if (strncasecmp(command, CMD_SETSUSPENDOPT,
 			strlen(CMD_SETSUSPENDOPT)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular SETSUSPENDOPT command\n");
 		bytes_written =
 			wl_android_set_suspendopt(net, command,
 			priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_SETSUSPENDMODE,
+	} else if (strncasecmp(command, CMD_SETSUSPENDMODE,
 			strlen(CMD_SETSUSPENDMODE)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular SETSUSPENDMODE command\n");
 		bytes_written =
 			wl_android_set_suspendmode(net, command,
 			priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_SETBAND, strlen(CMD_SETBAND)) == 0) {
+	} else if (strncasecmp(command, CMD_SETBAND, strlen(CMD_SETBAND)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular SETBAND command\n");
 #if 0
 		uint band = *(command + strlen(CMD_SETBAND) + 1) - '0';
 
 		bytes_written = wldev_set_band(net, band);
 #endif
-	} else if (strnicmp(command, CMD_GETBAND, strlen(CMD_GETBAND)) == 0) {
+	} else if (strncasecmp(command, CMD_GETBAND, strlen(CMD_GETBAND)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular GETBAND command\n");
 		bytes_written =
 			wl_android_get_band(net, command, priv_cmd.total_len);
@@ -538,7 +538,7 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 	/*
 	 * CUSTOMER_SET_COUNTRY feature is define for only GGSM model
 	 */
-	else if (strnicmp(command, CMD_COUNTRY, strlen(CMD_COUNTRY)) == 0) {
+	else if (strncasecmp(command, CMD_COUNTRY, strlen(CMD_COUNTRY)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular COUNTRY command\n");
 #if 0
 		char *country_code = command + strlen(CMD_COUNTRY) + 1;
@@ -548,28 +548,28 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 	}
 #endif /* WLAND_CFG80211_SUPPORT */
 #if defined(PNO_SUPPORT)
-	else if (strnicmp(command, CMD_PNOSSIDCLR_SET,
+	else if (strncasecmp(command, CMD_PNOSSIDCLR_SET,
 			strlen(CMD_PNOSSIDCLR_SET)) == 0) {
 		bytes_written = dhd_dev_pno_reset(net);
-	} else if (strnicmp(command, CMD_PNOSETUP_SET,
+	} else if (strncasecmp(command, CMD_PNOSETUP_SET,
 			strlen(CMD_PNOSETUP_SET)) == 0) {
 		bytes_written =
 			wl_android_set_pno_setup(net, command,
 			priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_PNOENABLE_SET,
+	} else if (strncasecmp(command, CMD_PNOENABLE_SET,
 			strlen(CMD_PNOENABLE_SET)) == 0) {
 		uint pfn_enabled =
 			*(command + strlen(CMD_PNOENABLE_SET) + 1) - '0';
 		bytes_written = dhd_dev_pno_enable(net, pfn_enabled);
 	}
 #endif /* PNO_SUPPORT */
-	else if (strnicmp(command, CMD_P2P_DEV_ADDR,
+	else if (strncasecmp(command, CMD_P2P_DEV_ADDR,
 			strlen(CMD_P2P_DEV_ADDR)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular P2P_DEV_ADDR command\n");
 		bytes_written =
 			wl_android_get_p2p_dev_addr(net, command,
 			priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_P2P_SET_NOA,
+	} else if (strncasecmp(command, CMD_P2P_SET_NOA,
 			strlen(CMD_P2P_SET_NOA)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular P2P_SET_NOA command\n");
 #if 0
@@ -579,7 +579,7 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 			wl_cfg80211_set_p2p_noa(net, command + skip,
 			priv_cmd.total_len - skip);
 #endif
-	} else if (strnicmp(command, CMD_P2P_GET_NOA,
+	} else if (strncasecmp(command, CMD_P2P_GET_NOA,
 			strlen(CMD_P2P_GET_NOA)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular P2P_GET_NOA command\n");
 #if 0
@@ -587,7 +587,7 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 			wl_cfg80211_get_p2p_noa(net, command,
 			priv_cmd.total_len);
 #endif
-	} else if (strnicmp(command, CMD_P2P_SET_PS,
+	} else if (strncasecmp(command, CMD_P2P_SET_PS,
 			strlen(CMD_P2P_SET_PS)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular P2P_SET_PS command\n");
 #if 0
@@ -599,7 +599,7 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 #endif
 	}
 #ifdef WLAND_CFG80211_SUPPORT
-	else if (strnicmp(command, CMD_SET_AP_WPS_P2P_IE,
+	else if (strncasecmp(command, CMD_SET_AP_WPS_P2P_IE,
 			strlen(CMD_SET_AP_WPS_P2P_IE)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular SET_AP_WPS_P2P_IE command\n");
 #if 0
@@ -611,17 +611,17 @@ int wland_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 #endif
 	}
 #endif /* WLAND_CFG80211_SUPPORT */
-	else if (strnicmp(command, CMD_OKC_SET_PMK,
+	else if (strncasecmp(command, CMD_OKC_SET_PMK,
 			strlen(CMD_OKC_SET_PMK)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular OKC_SET_PMK command\n");
 		bytes_written =
 			wl_android_set_pmk(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_OKC_ENABLE,
+	} else if (strncasecmp(command, CMD_OKC_ENABLE,
 			strlen(CMD_OKC_ENABLE)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular OKC_ENABLE command\n");
 		bytes_written =
 			wl_android_okc_enable(net, command, priv_cmd.total_len);
-	} else if (strnicmp(command, CMD_SETROAMMODE,
+	} else if (strncasecmp(command, CMD_SETROAMMODE,
 			strlen(CMD_SETROAMMODE)) == 0) {
 		WLAND_DBG(DEFAULT, INFO, "Received regular SETROAMMODE command\n");
 		bytes_written =

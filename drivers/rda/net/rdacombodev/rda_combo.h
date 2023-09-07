@@ -4,7 +4,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/i2c.h>
-#include <linux/wakelock.h>
+//#include "wakelock.h"
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
@@ -123,10 +123,10 @@ int rda_write_data_to_rf_from_firmware(struct i2c_client* client, char *data_nam
 #define RDA_BT_RF_I2C_DEVNAME "rda_bt_rf_i2c"
 #define RDA_BT_CORE_I2C_DEVNAME "rda_bt_core_i2c"
 
-extern struct i2c_client * rda_wifi_core_client;
-extern struct i2c_client * rda_wifi_rf_client;
-extern struct i2c_client * rda_bt_core_client;
-extern struct i2c_client * rda_bt_rf_client;
+extern struct i2c_client *rda_wifi_core_client;
+extern struct i2c_client *rda_wifi_rf_client;
+extern struct i2c_client *rda_bt_core_client;
+extern struct i2c_client *rda_bt_rf_client;
 extern struct completion rda_wifi_bt_comp;
 #ifdef RDA_COMBO_FROM_FIRMWARE
 extern atomic_t wifi_fw_status;

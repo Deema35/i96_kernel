@@ -620,7 +620,7 @@ static s32 wland_handle_network_link_event(struct wland_private *drvr,
 
 	event_packet->action = u8EventType;
 	switch (u8EventType) {
-		WLAND_DBG(EVENT, DEBUG, "u8EventType=%d\n", u8EventType);
+		//WLAND_DBG(EVENT, DEBUG, "u8EventType=%d\n", u8EventType);
 	case EVENT_AUTH_IND:
 		WLAND_DBG(EVENT, DEBUG, "EVENT_AUTH_IND\n");
 		event_packet->event_code = WLAND_E_CONNECT_IND;
@@ -1216,7 +1216,7 @@ static int wland_sdio_watchdog_thread(void *data)
 				"(bus->poll:%d,bus->polltick:%d,bus->pollrate:%d)\n",
 				bus->poll, bus->polltick, bus->pollrate);
 
-			SMP_RD_BARRIER_DEPENDS();
+			smp_rmb();
 
 			//In poll mode
 			/*
@@ -1320,9 +1320,9 @@ static int wland_sdio_watchdog_thread(void *data)
 	return 0;
 }
 
-static void wland_bus_watchdog(ulong data)
+static void wland_bus_watchdog(struct timer_list *tList)
 {
-	struct wland_sdio *bus = (struct wland_sdio *) data;
+	struct wland_sdio *bus = from_timer(bus, tList, timer);
 
 	WLAND_DBG(BUS, TRACE, "=======*****=====>Enter\n");
 
@@ -1717,10 +1717,11 @@ void *wland_sdio_probe(struct osl_info *osh, struct wland_sdio_dev *sdiodev)
 	/*
 	 * Set up the watchdog timer
 	 */
-	init_timer(&bus->timer);
-	bus->timer.data = (ulong) bus;
-	bus->timer.function = wland_bus_watchdog;
-
+	//init_timer(&bus->timer);
+	//bus->timer.data = (ulong) bus;
+	//bus->timer.function = wland_bus_watchdog;
+	
+	timer_setup(&bus->timer, wland_bus_watchdog, 0);
 	/*
 	 * Initialize watchdog thread
 	 */

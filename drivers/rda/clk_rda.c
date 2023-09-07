@@ -1,4 +1,4 @@
- /*
+/*
   * Copyright (C) 2013 RDA Microelectronics Inc.
   *
   * This program is free software; you can redistribute it and/or modify
@@ -15,183 +15,236 @@
   * along with this program; if not, write to the Free Software
   * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
   */
-#include "clk_rda.h"
-#include <linux/clk-private.h>
+#include <linux/clk-provider.h>
 #include <linux/clkdev.h>
+#include <linux/platform_device.h>
 
-extern struct clk_ops root_clk_rda_ops;
+
+#include <rda/plat/devices.h>
+#include <dt-bindings/rda/rda_clk_list.h>
+
+extern int rda_apsys_init(struct platform_device *pdev);
+
+extern struct clk_ops cpu_clk_rda_ops;
+extern struct clk_ops bus_clk_rda_ops;
+extern struct clk_ops mem_clk_rda_ops;
+extern struct clk_ops usb_clk_rda_ops;
+extern struct clk_ops axi_clk_rda_ops;
+extern struct clk_ops ahb1_clk_rda_ops;
+extern struct clk_ops apb1_clk_rda_ops;
+extern struct clk_ops apb2_clk_rda_ops;
+extern struct clk_ops gcg_clk_rda_ops;
+extern struct clk_ops gpu_clk_rda_ops;
+extern struct clk_ops vpu_clk_rda_ops;
+extern struct clk_ops voc_clk_rda_ops;
+extern struct clk_ops uart1_clk_rda_ops;
+extern struct clk_ops uart2_clk_rda_ops;
+extern struct clk_ops uart3_clk_rda_ops;
+extern struct clk_ops spiflash_clk_rda_ops;
+extern struct clk_ops bck_clk_rda_ops;
+extern struct clk_ops dsi_clk_rda_ops;
+extern struct clk_ops csi_clk_rda_ops;
+extern struct clk_ops debug_clk_rda_ops;
+
+extern struct clk_ops clk_out_clk_rda_ops;
+extern struct clk_ops aux_clk_rda_ops;
+extern struct clk_ops clk_32_clk_rda_ops;
+
+
 extern struct clk_ops cam_clk_rda_ops;
 extern struct clk_ops gouda_clk_rda_ops;
 extern struct clk_ops dpi_clk_rda_ops;
-extern struct clk_ops modem_clk_rda_ops;
 
-#define DEFINE_ROOT_CLK_RDA(_name, _flags, _id, _lock)		\
-	static struct clk _name;				\
-	static struct clk_rda _name##_hw = {			\
-		.hw = {						\
-			.clk = &_name,				\
-		},						\
-		.id = _id,					\
-		.lock = _lock,					\
-	};							\
-	static struct clk _name = {				\
-		.name = #_name,					\
-		.ops = &root_clk_rda_ops,			\
-		.hw = &_name##_hw.hw,				\
-		.num_parents = 0,				\
-		.flags = _flags,				\
-	};
 
-#define DEFINE_CHILD_CLK_RDA(_name, _parent_name,		\
-	       _parent_ptr, _flags, _id, _lock)			\
-	static struct clk _name;				\
-	static const char *_name##_parent_names[] = {		\
-		_parent_name,					\
-	};							\
-	static struct clk *_name##_parents[] = {		\
-		_parent_ptr,					\
-	};							\
-	static struct clk_rda _name##_hw = {			\
-		.hw = {						\
-			.clk = &_name,				\
-		},						\
-		.id = _id,					\
-		.lock = _lock,					\
-	};							\
-	static struct clk _name = {				\
-		.name = #_name,					\
-		.ops = &root_clk_rda_ops,			\
-		.hw = &_name##_hw.hw,				\
-		.parent_names = _name##_parent_names,		\
-		.num_parents =					\
-			ARRAY_SIZE(_name##_parent_names),	\
-		.parents = _name##_parents,			\
-		.flags = _flags,				\
-	};
 
-/* Static list of system clocks */
+static struct clk_hw	cpu_hw;
+static struct clk_hw	bus_hw;
+static struct clk_hw	mem_hw;
+static struct clk_hw	usb_hw;
+static struct clk_hw	axi_hw;
+static struct clk_hw	ahb1_hw;
+static struct clk_hw	apb1_hw;
+static struct clk_hw	apb2_hw;
+static struct clk_hw	gcg_hw;
+static struct clk_hw	gpu_hw;
+static struct clk_hw	vpu_hw;
+static struct clk_hw	voc_hw;
+static struct clk_hw	uart1_hw;
+static struct clk_hw	uart2_hw;
+static struct clk_hw	uart3_hw;
+static struct clk_hw	spiflash_hw;
+static struct clk_hw	gouda_hw;
+static struct clk_hw	dpi_hw;
+static struct clk_hw	camera_hw;
+static struct clk_hw	bck_hw;
+static struct clk_hw	dsi_hw;
+static struct clk_hw	csi_hw;
+static struct clk_hw	debug_hw;
+static struct clk_hw	clk_out_hw;
+static struct clk_hw	aux_clk_hw;
+static struct clk_hw	clk_32k_hw;
 
-/* root clocks */
-DEFINE_ROOT_CLK_RDA(cpu, CLK_IS_ROOT, CLK_RDA_CPU, NULL);
-DEFINE_ROOT_CLK_RDA(bus, CLK_IS_ROOT, CLK_RDA_BUS, NULL);
-DEFINE_ROOT_CLK_RDA(mem, CLK_IS_ROOT, CLK_RDA_MEM, NULL);
+static struct clk_lookup sys_clocks_lookups[26];
 
-/* childs of BUS */
-DEFINE_CHILD_CLK_RDA(usb, "bus", &bus, 0, CLK_RDA_USB, NULL);
-DEFINE_CHILD_CLK_RDA(axi, "bus", &bus, 0, CLK_RDA_AXI, NULL);
-DEFINE_CHILD_CLK_RDA(ahb1, "bus", &bus, 0, CLK_RDA_AHB1, NULL);
-DEFINE_CHILD_CLK_RDA(apb1, "bus", &bus, 0, CLK_RDA_APB1, NULL);
-DEFINE_CHILD_CLK_RDA(apb2, "bus", &bus, 0, CLK_RDA_APB2, NULL);
-DEFINE_CHILD_CLK_RDA(gcg, "bus", &bus, 0, CLK_RDA_GCG, NULL);
-DEFINE_CHILD_CLK_RDA(gpu, "bus", &bus, 0, CLK_RDA_GPU, NULL);
-DEFINE_CHILD_CLK_RDA(vpu, "bus", &bus, 0, CLK_RDA_VPU, NULL);
-DEFINE_CHILD_CLK_RDA(voc, "bus", &bus, 0, CLK_RDA_VOC, NULL);
-
-/* childs of APB2 */
-DEFINE_CHILD_CLK_RDA(uart1, "apb2", &apb2, 0, CLK_RDA_UART1, NULL);
-DEFINE_CHILD_CLK_RDA(uart2, "apb2", &apb2, 0, CLK_RDA_UART2, NULL);
-DEFINE_CHILD_CLK_RDA(uart3, "apb2", &apb2, 0, CLK_RDA_UART3, NULL);
-
-/* childs of AHB1 */
-DEFINE_CHILD_CLK_RDA(spiflash, "ahb1", &ahb1, 0, CLK_RDA_SPIFLASH, NULL);
-
-/* childs of GCG */
-DEFINE_CHILD_CLK_RDA(gouda, "gcg", &gcg, CLK_SET_RATE_PARENT,
-		CLK_RDA_GOUDA, NULL);
-DEFINE_CHILD_CLK_RDA(dpi, "gcg", &gcg, CLK_SET_RATE_PARENT,
-		CLK_RDA_DPI, NULL);
-DEFINE_CHILD_CLK_RDA(camera, "gcg", &gcg, CLK_SET_RATE_PARENT,
-		CLK_RDA_CAMERA, NULL);
-
-/* other clocks */
-DEFINE_ROOT_CLK_RDA(bck, CLK_IS_ROOT, CLK_RDA_BCK, NULL);
-DEFINE_ROOT_CLK_RDA(dsi, CLK_IS_ROOT, CLK_RDA_DSI, NULL);
-DEFINE_ROOT_CLK_RDA(csi, CLK_IS_ROOT, CLK_RDA_CSI, NULL);
-DEFINE_ROOT_CLK_RDA(debug, CLK_IS_ROOT, CLK_RDA_DEBUG, NULL);
-DEFINE_ROOT_CLK_RDA(clk_out, CLK_IS_ROOT, CLK_RDA_CLK_OUT, NULL);
-DEFINE_ROOT_CLK_RDA(aux_clk, CLK_IS_ROOT, CLK_RDA_AUX_CLK, NULL);
-DEFINE_ROOT_CLK_RDA(clk_32k, CLK_IS_ROOT, CLK_RDA_CLK_32K, NULL);
-
-static struct clk_lookup sys_clocks_lookups[] = {
-	CLKDEV_INIT(NULL, "cpu", &cpu),
-	CLKDEV_INIT(NULL, "bus", &bus),
-	CLKDEV_INIT(NULL, "mem", &mem),
-	CLKDEV_INIT(NULL, "usb", &usb),
-
-	CLKDEV_INIT(NULL, "axi", &axi),
-	CLKDEV_INIT(NULL, "ahb1", &ahb1),
-	CLKDEV_INIT(NULL, "apb1", &apb1),
-	CLKDEV_INIT(NULL, "apb2", &apb2),
-	CLKDEV_INIT(NULL, "gcg", &gcg),
-	CLKDEV_INIT(NULL, "gpu", &gpu),
-	CLKDEV_INIT(NULL, "vpu", &vpu),
-	CLKDEV_INIT(NULL, "voc", &voc),
-	CLKDEV_INIT(NULL, "uart1", &uart1),
-	CLKDEV_INIT(NULL, "uart2", &uart2),
-	CLKDEV_INIT(NULL, "uart3", &uart3),
-
-	CLKDEV_INIT(NULL, "spiflash", &spiflash),
-
-	CLKDEV_INIT(NULL, "gouda", &gouda),
-	CLKDEV_INIT(NULL, "dpi", &dpi),
-	CLKDEV_INIT(NULL, "camera", &camera),
-
-	CLKDEV_INIT(NULL, "bck", &bck),
-	CLKDEV_INIT(NULL, "csi", &csi),
-	CLKDEV_INIT(NULL, "debug", &debug),
-	CLKDEV_INIT(NULL, "dsi", &dsi),
-	CLKDEV_INIT(NULL, "clk_out", &clk_out),
-	CLKDEV_INIT(NULL, "aux_clk", &aux_clk),
-	CLKDEV_INIT(NULL, "clk_32k", &clk_32k),
-};
-
-void __init clk_rda_init(void)
+static int rda_clk_hw_register(int id, struct clk_hw *hw, const char *name, struct clk_ops *rda_clk_ops, const char *parent_name, int parentNum, unsigned long	flags,
+ struct clk_lookup *lookup, struct platform_device *pdev, struct clk_onecell_data *clk_data)
 {
-	__clk_init(NULL, &cpu);
-	__clk_init(NULL, &bus);
-	__clk_init(NULL, &mem);
-	__clk_init(NULL, &usb);
-	__clk_init(NULL, &axi);
-	__clk_init(NULL, &ahb1);
-	__clk_init(NULL, &apb1);
-	__clk_init(NULL, &apb2);
-	__clk_init(NULL, &gcg);
-	__clk_init(NULL, &gpu);
-	__clk_init(NULL, &vpu);
-	__clk_init(NULL, &voc);
-	__clk_init(NULL, &uart1);
-	__clk_init(NULL, &uart2);
-	__clk_init(NULL, &uart3);
-	__clk_init(NULL, &spiflash);
+	struct clk_init_data init;
+	int reg;
 
-	gouda.ops = &gouda_clk_rda_ops;
-	dpi.ops = &dpi_clk_rda_ops;
-	camera.ops = &cam_clk_rda_ops;
-	__clk_init(NULL, &gouda);
-	__clk_init(NULL, &dpi);
-	__clk_init(NULL, &camera);
+	init.name = name;
+	init.ops = rda_clk_ops;
+	init.flags = flags;
+	init.parent_names = &parent_name;
+	init.num_parents = parentNum;
 
-	__clk_init(NULL, &bck);
-	__clk_init(NULL, &dsi);
-	__clk_init(NULL, &csi);
-	__clk_init(NULL, &debug);
+	hw->init = &init;
 
-	clk_out.ops = &modem_clk_rda_ops;
-	aux_clk.ops = &modem_clk_rda_ops;
-	clk_32k.ops = &modem_clk_rda_ops;
-	__clk_init(NULL, &clk_out);
-	__clk_init(NULL, &aux_clk);
-	__clk_init(NULL, &clk_32k);
-
-	clkdev_add_table(sys_clocks_lookups, ARRAY_SIZE(sys_clocks_lookups));
-
-#if 0
-	clk_set_rate(&cpu, 800000000);
-	clk_set_rate(&axi, 480000000);
-	clk_set_rate(&ahb1, 120000000);
-	clk_set_rate(&apb1, 120000000);
-	clk_set_rate(&apb2, 120000000);
-	clk_set_rate(&mem, 200000000);
-#endif
+	reg = clk_register(&pdev->dev, hw);
+	
+	if (IS_ERR(reg))
+	{
+		dev_info(&pdev->dev, "clk  %s registration error", name);
+		
+		return reg;
+	}
+	
+	clk_data->clks[id] = reg;
+	
+	lookup->con_id = name;
+	lookup->clk = hw->clk;
+	lookup->clk_hw = hw;
+	
+	return 0;
 }
 
+
+
+static int rda_clk_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	
+	int clk_num = 26;
+	
+	struct device_node *node = pdev->dev.of_node;
+	
+	struct clk_onecell_data *clk_data;
+	
+	clk_data = kzalloc(sizeof(*clk_data), GFP_KERNEL);
+	
+	if (!clk_data) return -ENXIO;
+	
+	clk_data->clks = kcalloc(clk_num, sizeof(*clk_data->clks), GFP_KERNEL);
+		
+	if (!clk_data->clks)
+	{
+		kfree(clk_data);
+		return -ENXIO;
+	}
+	
+	clk_data->clk_num = clk_num;
+	
+	for (int i = 0; i < clk_num; i++) clk_data->clks[i] = ERR_PTR(-ENOENT);
+	
+	
+	dev_info(&pdev->dev, "rda_clk_probe");
+	
+	ret = rda_apsys_init(pdev);
+	
+	if (ret < 0) return ret;
+	
+	/* root clocks */
+	ret = rda_clk_hw_register(CLK_RDA_CPU, &cpu_hw, "cpu", &cpu_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[0], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_BUS, &bus_hw, "bus", &bus_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[1], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_MEM, &mem_hw, "mem", &mem_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[2], pdev, clk_data);
+	if (ret < 0) return ret;
+	
+	/* childs of BUS */
+	ret = rda_clk_hw_register(CLK_RDA_USB, &usb_hw, "usb", &usb_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[3], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_AXI, &axi_hw, "axi", &axi_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[4], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_AHB1, &ahb1_hw, "ahb1", &ahb1_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[5], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_APB1, &apb1_hw, "apb1", &apb1_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[6], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_APB2, &apb2_hw, "apb2", &apb2_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[7], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_GCG, &gcg_hw, "gcg", &gcg_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[8], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_GPU, &gpu_hw, "gpu", &gpu_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[9], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_VPU, &vpu_hw, "vpu", &vpu_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[10], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_VOC, &voc_hw, "voc", &voc_clk_rda_ops, "bus", 1, 0, &sys_clocks_lookups[11], pdev, clk_data);
+	if (ret < 0) return ret;
+	
+	/* childs of APB2 */
+	ret = rda_clk_hw_register(CLK_RDA_UART1, &uart1_hw, "uart1", &uart1_clk_rda_ops, "apb2", 1, 0, &sys_clocks_lookups[12], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_UART2, &uart2_hw, "uart2", &uart2_clk_rda_ops, "apb2", 1, 0, &sys_clocks_lookups[13], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_UART2, &uart3_hw, "uart3", &uart3_clk_rda_ops, "apb2", 1, 0, &sys_clocks_lookups[14], pdev, clk_data);
+	if (ret < 0) return ret;
+	
+	/* childs of AHB1 */
+	ret = rda_clk_hw_register(CLK_RDA_SPIFLASH, &spiflash_hw, "spiflash", &spiflash_clk_rda_ops, "apb1", 1, 0, &sys_clocks_lookups[15], pdev, clk_data);
+	if (ret < 0) return ret;
+	
+	/* childs of GCG */
+	ret = rda_clk_hw_register(CLK_RDA_GOUDA, &gouda_hw, "gouda", &gouda_clk_rda_ops, "gcg", 1, CLK_SET_RATE_PARENT, &sys_clocks_lookups[16], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_DPI, &dpi_hw, "dpi", &gouda_clk_rda_ops, "gcg", 1, CLK_SET_RATE_PARENT, &sys_clocks_lookups[17], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_CAMERA, &camera_hw, "camera", &gouda_clk_rda_ops, "gcg", 1, CLK_SET_RATE_PARENT, &sys_clocks_lookups[18], pdev, clk_data);
+	if (ret < 0) return ret;
+	
+	ret = rda_clk_hw_register(CLK_RDA_BCK, &bck_hw, "bck", &bck_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[19], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_DSI, &dsi_hw, "dsi", &dsi_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[20], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_CSI, &csi_hw, "csi", &csi_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[21], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_DEBUG, &debug_hw, "debug", &debug_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[22], pdev, clk_data);
+	if (ret < 0) return ret;
+
+	
+	ret = rda_clk_hw_register(CLK_RDA_CLK_OUT, &clk_out_hw, "clk_out", &clk_out_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[23], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_AUX_CLK, &aux_clk_hw, "aux_clk", &aux_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[24], pdev, clk_data);
+	if (ret < 0) return ret;
+	ret = rda_clk_hw_register(CLK_RDA_CLK_32K,&clk_32k_hw, "clk_32k", &clk_32_clk_rda_ops, NULL, 0, 0, &sys_clocks_lookups[25], pdev, clk_data);
+	if (ret < 0) return ret;
+
+
+	ret = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+	
+	return ret;
+}
+
+
+
+static const struct of_device_id rda_sysclk_dt_matches[] = {
+	{ .compatible = "rda,8810pl-sysclk" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, rda_sysclk_dt_matches);
+
+static struct platform_driver rda_clk_driver = {
+	.probe		= rda_clk_probe,
+	.driver 	= {
+		.name	= RDA_CLK_DRV_NAME,
+		.owner	= THIS_MODULE,
+		.of_match_table = rda_sysclk_dt_matches,
+	},
+};
+
+static int __init rda_clk_init(void)
+{
+	return platform_driver_register(&rda_clk_driver);
+
+}
+
+arch_initcall(rda_clk_init);
