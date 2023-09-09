@@ -1707,11 +1707,11 @@ done:
 	return err;
 }
 
-static s32 cfg80211_config_default_key(struct wiphy *wiphy,
-	struct net_device *ndev, u8 key_idx, bool unicast, bool multicast)
+static int cfg80211_config_default_key(struct wiphy *wiphy,
+	struct net_device *ndev, int link_id, u8 key_idx, bool unicast, bool multicast)
 {
 	u32 index, wsec;
-	s32 err = 0;
+	int err = 0;
 	struct wland_if *ifp = netdev_priv(ndev);
 
 	WLAND_DBG(CFG80211, TRACE, "key index (%d), Enter\n", key_idx);
@@ -1840,12 +1840,12 @@ struct key_params {
 };
 #endif /* STRUCT_REF */
 
-static s32 cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
+static int cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev, int link_id,
 	u8 key_idx, bool pairwise, const u8 * mac_addr,
 	struct key_params *params)
 {
 	struct wland_if *ifp = netdev_priv(ndev);
-	s32 err = 0;
+	int err = 0;
 
 #if 0
 	struct wland_wsec_key key;
@@ -2032,12 +2032,12 @@ done:
 	return err;
 }
 
-static s32 cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
+static int cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev, int link_id,
 	u8 key_idx, bool pairwise, const u8 * mac_addr)
 {
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_wsec_key key;
-	s32 err = 0;
+	int err = 0;
 
 	WLAND_DBG(CFG80211, TRACE, "Enter\n");
 
@@ -2071,7 +2071,7 @@ static s32 cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 	return err;
 }
 
-static s32 cfg80211_get_key(struct wiphy *wiphy, struct net_device *ndev,
+static int cfg80211_get_key(struct wiphy *wiphy, struct net_device *ndev, int link_id,
 	u8 key_idx, bool pairwise, const u8 * mac_addr, void *cookie,
 	void (*callback) (void *cookie, struct key_params * params))
 {
@@ -2079,7 +2079,8 @@ static s32 cfg80211_get_key(struct wiphy *wiphy, struct net_device *ndev,
 	struct wland_if *ifp = netdev_priv(ndev);
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
 	struct wland_cfg80211_security *sec;
-	s32 wsec, err = 0;
+	int err = 0;
+	s32 wsec = 0;
 
 	WLAND_DBG(CFG80211, TRACE, "key index (%d),Enter\n", key_idx);
 
@@ -2133,8 +2134,8 @@ done:
 	return err;
 }
 
-static s32 cfg80211_config_default_mgmt_key(struct wiphy *wiphy,
-	struct net_device *ndev, u8 key_idx)
+static int cfg80211_config_default_mgmt_key(struct wiphy *wiphy,
+	struct net_device *ndev, int link_id, u8 key_idx)
 {
 	WLAND_DBG(CFG80211, TRACE, "Not supported\n");
 
@@ -5585,7 +5586,7 @@ static s32 wland_bss_roaming_done(struct wland_cfg80211_info *cfg,
 	struct wland_cfg80211_profile *profile = ndev_to_prof(ndev);
 	struct wland_cfg80211_connect_info *conn_info = cfg_to_conn(cfg);
 	struct cfg80211_roam_info roam_info = {
-				.bssid = (u8 *) profile->bssid,
+				.links[0].bssid = (u8 *) profile->bssid,
 				.req_ie = conn_info->req_ie,
 				.req_ie_len = conn_info->req_ie_len,
 				.resp_ie = conn_info->resp_ie,
@@ -5639,7 +5640,7 @@ done:
 	kfree(buf);
 out:
 
-	roam_info.channel = notify_channel;
+	roam_info.links[0].channel = notify_channel;
 	cfg80211_roamed(ndev,&roam_info, GFP_KERNEL);
 	set_bit(VIF_STATUS_CONNECTED, &ifp->vif->sme_state);
 	WLAND_DBG(CFG80211, TRACE, "Done(err:%d)\n", err);

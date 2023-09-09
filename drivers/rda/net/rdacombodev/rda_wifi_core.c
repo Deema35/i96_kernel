@@ -24,10 +24,10 @@ static int rda_wifi_core_probe(struct i2c_client *client)
 	return result;
 }
 
-static int rda_wifi_core_remove(struct i2c_client *client)
+static void rda_wifi_core_remove(struct i2c_client *client)
 {
 	printk(KERN_INFO "rda_wifi_core_remove \n");
-	return 0;
+	
 }
 
 

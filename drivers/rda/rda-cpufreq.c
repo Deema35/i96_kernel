@@ -442,10 +442,10 @@ static int  rda_cpufreq_hw_driver_probe(struct platform_device *pdev)
 	return cpufreq_register_driver(&rda_cpufreq_driver);
 }
 
-static int rda_cpufreq_hw_driver_remove(struct platform_device *pdev)
+static void rda_cpufreq_hw_driver_remove(struct platform_device *pdev)
 {
-	
-	return cpufreq_unregister_driver(&rda_cpufreq_driver);
+	cpufreq_unregister_driver(&rda_cpufreq_driver);
+	 
 }
 
 static const struct of_device_id rda_cpufreq_hw_match[] = {
@@ -457,7 +457,7 @@ MODULE_DEVICE_TABLE(of, rda_cpufreq_hw_match);
 
 static struct platform_driver rda_cpufreq_hw_driver = {
 	.probe = rda_cpufreq_hw_driver_probe,
-	.remove = rda_cpufreq_hw_driver_remove,
+	.remove_new = rda_cpufreq_hw_driver_remove,
 	.driver = {
 		.name = "rda-cpufreq-hw",
 		.of_match_table = rda_cpufreq_hw_match,

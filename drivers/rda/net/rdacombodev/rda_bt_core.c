@@ -30,10 +30,10 @@ static int rda_bt_core_probe(struct i2c_client *client)
 	return result;
 }
 
-static int rda_bt_core_remove(struct i2c_client *client)
+static void rda_bt_core_remove(struct i2c_client *client)
 {
 	printk(KERN_INFO "rda_bt_core_remove \n");
-	return 0;
+	
 }
 
 static const struct i2c_device_id bt_core_i2c_id[] ={

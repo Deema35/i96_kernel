@@ -15,11 +15,11 @@ static int rda_bt_rf_probe(struct i2c_client *client)
 	return result;
 }
 
-static int rda_bt_rf_remove(struct i2c_client *client)
+static void rda_bt_rf_remove(struct i2c_client *client)
 {
 	printk(KERN_INFO "rda_bt_rf_remove \n");
 	rda_bt_rf_client = NULL;
-	return 0;
+	
 }
 
 static int rda_bt_rf_detect(struct i2c_client *client,
