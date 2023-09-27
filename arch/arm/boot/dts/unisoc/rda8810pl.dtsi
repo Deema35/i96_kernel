@@ -52,11 +52,13 @@
 		ranges = <0x0 0x10000000 0xfffffff>;
 
 		gpioc: gpio-controller@1a08000 {
-			compatible = "rda,8810pl-gpioc-new";
+			compatible = "rda,8810pl-gpio-old";
 			reg = <0x1a08000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <2>;
 			ngpios = <32>;
+			
+			id = <3>;
 		};
 	};
 	
@@ -177,7 +179,7 @@
 
 		gpioa: gpio-controller@30000 {
 			
-			compatible = "rda,8810pl-gpio";
+			compatible = "rda,8810pl-gpio-old";
 			reg = <0x30000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <2>;
@@ -185,11 +187,13 @@
 			interrupt-controller;
 			#interrupt-cells = <2>;
 			interrupts = <12 IRQ_TYPE_LEVEL_HIGH>;
+			
+			id = <0>;
 		};
 
 		gpiob: gpio-controller@31000 {
 			
-			compatible = "rda,8810pl-gpio";
+			compatible = "rda,8810pl-gpio-old";
 			reg = <0x31000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <2>;
@@ -197,11 +201,13 @@
 			interrupt-controller;
 			#interrupt-cells = <2>;
 			interrupts = <13 IRQ_TYPE_LEVEL_HIGH>;
+			
+			id = <1>;
 		};
 
 		gpiod: gpio-controller@32000 {
 			
-			compatible = "rda,8810pl-gpio";
+			compatible = "rda,8810pl-gpio-old";
 			reg = <0x32000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <2>;
@@ -209,6 +215,8 @@
 			interrupt-controller;
 			#interrupt-cells = <2>;
 			interrupts = <14 IRQ_TYPE_LEVEL_HIGH>;
+			
+			id = <2>;
 		};
 		
 		i2c0: i2c@50000 {
