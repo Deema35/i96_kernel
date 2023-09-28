@@ -1,5 +1,5 @@
 ## i96_kernel
-Kernel files for OrangePI i96
+#Kernel files for OrangePI i96(Orange PI 2g-iot)
 
 You need add this files to kernell directory. 
 
@@ -26,7 +26,7 @@ In releases you can find Image compilled on 6.5.1 kernell and Busybox 1.36.1. Lo
 
 #Wi-Fi
 
-If you want wi-fi you need create wi-fi acsses point with ssid="i96" password:123456789. For change ap you need edit file etc/wpa_supplicant.conf, use for it command:
+If you want wi-fi you need create wi-fi acsses point with ssid="i96" password:123456789 IP:192.168.1.1. OrangePI will appear on IP 192.168.1.252. For change ap IP change /etc/rc.d/rc.network. For change ssid and password you need edit file /etc/wpa_supplicant.conf, use for it command:
 
 `wpa_passphrase i96 123456789`
 
@@ -37,4 +37,4 @@ sudo mount -o loop,offset=2097152 NewImg.img /tmp/tmp (for modify boot partition
 sudo mount -o loop,offset=54525952 NewImg.img /tmp/tmp (for modify root system partition)
 ```
 
-[Habrahabr.ru](https:)
+[Habrahabr.ru](https://habr.com/ru/articles/763996/)
