@@ -18,6 +18,8 @@ Set options:
 2. Device drivers-->Character devices-->Enable TTY-->Serial Drivers-->RDA Micro serial port support-->Console on RDA Micr serial port
 3. Device drivers-->GPIO Support-->Memory Mapped GPIO drivers-->RDA Micro GPIO controller support
 4. Device drivers-->RDA support  (You need set all options in "RDA support" submenu)
+5. Device drivers-->RDA support-->RdaMicro IEEE802.11 emdedded FullMac WLAN driver Need set as Y not m. For this you need change set for:
+6. Networking support-->Wireless-->cfg80211-wireless configuration API 
 
 
 make ARCH=arm CROSS_COMPILE=/"path to toolchain"/gcc-linaro-7.5.0-2019.12-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf- -j16
