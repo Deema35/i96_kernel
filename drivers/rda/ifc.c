@@ -158,12 +158,11 @@ static void ifc_channel_flush(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 
 	spin_lock_irqsave(&ifc_lock, flags);
 	/* If fifo not empty, flush it. */
-	if (!(hwp_sysIfc->std_ch[channel].status & SYS_IFC_FIFO_EMPTY))
-		hwp_sysIfc->std_ch[channel].control |= SYS_IFC_FLUSH;
+	if (!(hwp_sysIfc->std_ch[channel].status & SYS_IFC_FIFO_EMPTY)) hwp_sysIfc->std_ch[channel].control |= SYS_IFC_FLUSH;
 	spin_unlock_irqrestore(&ifc_lock, flags);
 }
 
-static int ifc_channel_is_fifo_empty(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
+static inline int ifc_channel_is_fifo_empty(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 {
 	unsigned long flags;
 	int fifo_empty;
@@ -201,12 +200,10 @@ static int ifc_channel_get_tc(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 	return tc;
 }
 
-u8 ifc_transfer_start(HAL_IFC_REQUEST_ID_T request_id, u8* mem_addr,
-	u32 xfer_size, HAL_IFC_MODE_T ifc_mode)
+u8 ifc_transfer_start(HAL_IFC_REQUEST_ID_T request_id, u8* mem_addr, u32 xfer_size, HAL_IFC_MODE_T ifc_mode)
 {
 	unsigned long flags;
-	u8 channel;
-	enum ddr_master master_idx;
+	u8 channel = SYS_IFC_CH_TO_USE(hwp_sysIfc->get_ch) ;
 
 	BUG_ON(!hwp_sysIfc);
 	BUG_ON(!xfer_size);
@@ -223,14 +220,13 @@ u8 ifc_transfer_start(HAL_IFC_REQUEST_ID_T request_id, u8* mem_addr,
 	}
 	spin_lock_irqsave(&ifc_lock, flags);
 	/* alloc channel by hardware */
-	channel = SYS_IFC_CH_TO_USE(hwp_sysIfc->get_ch) ;
 	if (channel >= SYS_IFC_STD_CHAN_NB)
 	{
 		spin_unlock_irqrestore(&ifc_lock, flags);
 		return HAL_UNKNOWN_CHANNEL;
 	}
-	master_idx = PM_DDR_IFC0 + channel;
-	pm_ddr_get(master_idx);
+	
+	pm_ddr_get(PM_DDR_IFC0 + channel);
 	/* take the channel */
 	ifc_channel_owner[channel] = request_id;
 	hwp_sysIfc->std_ch[channel].sg_table[0].start_addr = (u32)mem_addr;
@@ -243,7 +239,7 @@ u8 ifc_transfer_start(HAL_IFC_REQUEST_ID_T request_id, u8* mem_addr,
 	return channel;
 }
 
-u32 ifc_transfer_get_tc(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
+u32 inline ifc_transfer_get_tc(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 {
 	BUG_ON(!hwp_sysIfc);
 	return ifc_channel_get_tc(request_id, channel);
@@ -252,27 +248,24 @@ u32 ifc_transfer_get_tc(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 void ifc_transfer_flush(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 {
 #define IFC_FLUSH_TIMEOUT_MS 1000
-	unsigned long timeout;
+	unsigned long timeout = jiffies + msecs_to_jiffies(IFC_FLUSH_TIMEOUT_MS);
 
 	BUG_ON(!hwp_sysIfc);
 
 	ifc_channel_flush(request_id, channel);
 
-	timeout = jiffies + msecs_to_jiffies(IFC_FLUSH_TIMEOUT_MS);
-	while(!ifc_channel_is_fifo_empty(request_id, channel)
-				&& time_before(jiffies, timeout));
+	while(!ifc_channel_is_fifo_empty(request_id, channel) && time_before(jiffies, timeout));
 
 	/* timeout? */
 	if(!ifc_channel_is_fifo_empty(request_id, channel))
 		BUG_ON(1);
 }
 
-void ifc_transfer_stop(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
+void inline ifc_transfer_stop(HAL_IFC_REQUEST_ID_T request_id, u8 channel)
 {
-	enum ddr_master master_idx;
+	enum ddr_master master_idx = PM_DDR_IFC0 + channel;
 	BUG_ON(!hwp_sysIfc);
 
-	master_idx = PM_DDR_IFC0 + channel;
 	pm_ddr_put(master_idx);
 	ifc_channel_release(request_id, channel);
 }

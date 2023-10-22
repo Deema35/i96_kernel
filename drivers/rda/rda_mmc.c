@@ -483,11 +483,11 @@ static int do_data_complete(struct rda_mmc_host *host)
 {
 	int result = 0;
 	HAL_SDMMC_TRANSFER_T *transfer = &host->data_transfer;
-	struct mmc_data *data = host->data;
+
 
 	//dev_info(mmc_dev(host->mmc), "host id:%d do_data_complete \n", host->id);
 
-	if (!data || transfer->channel == HAL_UNKNOWN_CHANNEL || transfer->channel >= SYS_IFC_STD_CHAN_NB) {
+	if (!host->data || transfer->channel == HAL_UNKNOWN_CHANNEL || transfer->channel >= SYS_IFC_STD_CHAN_NB) {
 		//dev_err(mmc_dev(host->mmc), "do_data_complete invalid channel(%d), flags = 0x%x\n", transfer->channel, (data ? data->flags : 0));
 		return -EREMOTEIO;
 	}
@@ -500,7 +500,7 @@ static int do_data_complete(struct rda_mmc_host *host)
 	else {
 		hal_data_transfer_stop(host, transfer);
 		//dev_err(mmc_dev(host->mmc), "data complete but DMA not done\n");
-		data->error = -ETIMEDOUT;
+		host->data->error = -ETIMEDOUT;
 	}
 
 	/* 
@@ -508,11 +508,11 @@ static int do_data_complete(struct rda_mmc_host *host)
 	 * Do not care reading, because our HW does not clear crc error automatically.
 	 * In fact, there is always RD_ERR_INT before crc error. It will be processed firstly.
 	 */
-	if (data->flags & MMC_DATA_WRITE) {
+	if (host->data->flags & MMC_DATA_WRITE) {
 		result = hal_data_write_check_crc(host);
 		if (result) {
 			//dev_err(mmc_dev(host->mmc), "hal_data_write_check_crc fail, ret = %d\n", result);
-			data->error = result;
+			host->data->error = result;
 		}
 	}
 
@@ -538,10 +538,8 @@ static void tasklet_worker(unsigned long param)
 static irqreturn_t rda_mmc_irq(int irq, void *dev_id)
 {
 	struct rda_mmc_host *host = dev_id;
-	u32 int_status;
-	struct mmc_data *data;
-
-	int_status = ((HWP_SDMMC_T*)host->base)->SDMMC_INT_STATUS;
+	u32 int_status = ((HWP_SDMMC_T*)host->base)->SDMMC_INT_STATUS;
+	
 	hal_irq_clear(host, int_status);
 
 	//dev_info(mmc_dev(host->mmc), "rda_mmc_irq, int_status = 0x%08x\n", int_status);
@@ -551,7 +549,6 @@ static irqreturn_t rda_mmc_irq(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	data = host->data;
 
 	/* we only care DATA_OVER and DATA ERR Interrupt */
 	if (int_status & (SDMMC_RD_ERR_INT | SDMMC_WR_ERR_INT))
@@ -566,8 +563,8 @@ static irqreturn_t rda_mmc_irq(int irq, void *dev_id)
 	 * So, we check only RXDMA_DONE flag to indicate that reading is over.
 	 *
 	 */
-	else if (((data && (data->flags & MMC_DATA_READ)) && (int_status & SDMMC_RXDMA_DONE_INT)) ||
-	((int_status & SDMMC_DAT_OVER_INT) && (data && (data->flags & MMC_DATA_WRITE))))
+	else if (((host->data && (host->data->flags & MMC_DATA_READ)) && (int_status & SDMMC_RXDMA_DONE_INT)) ||
+	((int_status & SDMMC_DAT_OVER_INT) && (host->data && (host->data->flags & MMC_DATA_WRITE))))
 	{
 		tasklet_schedule(&host->finish_tasklet);
 	}
@@ -640,10 +637,8 @@ static int __do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, str
 	int result = 0;
 	struct rda_mmc_host *host = mmc_priv(mmc);
 	HAL_SDMMC_TRANSFER_T *transfer = &host->data_transfer;
-	unsigned int tsize;
-#ifdef RDA_MMC_USE_INT
-	unsigned long timeout;
-#endif /* RDA_MMC_USE_INT */
+	unsigned int tsize = data->blocks * data->blksz;
+
 
 	//dev_info(mmc_dev(host->mmc),  "%s, id:%d cmdidx = %d, blks = %d, addr = 0x%08x\n", __func__, host->id,cmd->opcode, data->blocks, dma_addr);
 
@@ -656,15 +651,11 @@ static int __do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, str
 	transfer->blockNum = data->blocks;
 	transfer->blockSize = data->blksz;
 
-	if (data->flags & MMC_DATA_READ)
-	{
-		transfer->direction  = HAL_SDMMC_DIRECTION_READ;
-	} else if (data->flags & MMC_DATA_WRITE)
-	{
-		transfer->direction  = HAL_SDMMC_DIRECTION_WRITE;
-	}
+	if (data->flags & MMC_DATA_READ) transfer->direction  = HAL_SDMMC_DIRECTION_READ;
+	
+	else if (data->flags & MMC_DATA_WRITE) transfer->direction  = HAL_SDMMC_DIRECTION_WRITE;
+	
 
-	tsize = data->blocks * data->blksz;
 	if (rda_soc_is_older_metal10()) {
 		if (!IS_ALIGNED(dma_addr, 16) &&
 			(dma_addr >> PAGE_SHIFT != ((dma_addr + tsize -1) >> PAGE_SHIFT))) {
@@ -740,10 +731,9 @@ static int __do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, str
 
 	host->transfer_done = 1;
 #else
-	timeout = wait_for_completion_timeout(&host->req_done, msecs_to_jiffies(MCD_DATA_TIMEOUT_MS));
-	if (timeout == 0) {
-		u32 irq = ((HWP_SDMMC_T*)host->base)->SDMMC_INT_STATUS;
-		u32 op_status = (hal_get_op_status(host)).reg;
+	unsigned long timeout = wait_for_completion_timeout(&host->req_done, msecs_to_jiffies(MCD_DATA_TIMEOUT_MS));
+	if (timeout == 0)
+	{		
 		u32 ifc_tc = ifc_transfer_get_tc(transfer->ifcReq,
 				transfer->channel);
 
@@ -753,14 +743,14 @@ static int __do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, str
 				"cmd(%d), blocks(%d), irq = 0x%x, "
 				"op_sta = 0x%x, tc = 0x%x\n",
 				MCD_DATA_TIMEOUT_MS, cmd->opcode,
-				data->blocks, irq, op_status, ifc_tc);
+				data->blocks, ((HWP_SDMMC_T*)host->base)->SDMMC_INT_STATUS, (hal_get_op_status(host)).reg, ifc_tc);
 		} else if (data->flags & MMC_DATA_WRITE) {
 			dev_err(mmc_dev(host->mmc),
 				"transfer (write) cmd timeout(%d ms): "
 				"cmd(%d), blocks(%d), irq = 0x%x, "
 				"op_sta = 0x%x, tc = 0x%x\n",
 				MCD_DATA_TIMEOUT_MS, cmd->opcode,
-				data->blocks, irq, op_status, ifc_tc);
+				data->blocks, ((HWP_SDMMC_T*)host->base)->SDMMC_INT_STATUS, (hal_get_op_status(host)).reg, ifc_tc);
 		}
 
 		/* Stop dma's action */
@@ -850,11 +840,7 @@ static int do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, struc
 	for (i = 0; i < data->sg_len; i++) {
 		//dev_info(mmc_dev(host->mmc), "do_data_transfer, sg %d, size = %d\n", i, data->sg[i].length);
 
-#if 0
-		if ((rda_debug & RDA_DBG_MMC) && (data->flags & MMC_DATA_WRITE))
-			rda_dump_buf((char *)sg_virt(&data->sg[i]),
-				data->sg[i].length);
-#endif
+
 
 		/*
 		 * For some card of emmc, when exec command 18 & 25,
@@ -906,11 +892,6 @@ static int do_data_transfer(struct mmc_host *mmc, struct mmc_command *cmd, struc
 			dma_map_sg(mmc_dev(host->mmc), &data->sg[i], 1, DMA_FROM_DEVICE);
 		}
 
-#if 0
-		if ((rda_debug & RDA_DBG_MMC) && (data->flags & MMC_DATA_READ))
-			rda_dump_buf((char *)sg_virt(&data->sg[i]),
-				data->sg[i].length);
-#endif
 	}
 
 	host->data = NULL;
@@ -977,20 +958,15 @@ static void rda_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct rda_mmc_host *host = mmc_priv(mmc);
 	unsigned long mclk = clk_get_rate(host->master_clk);
 	unsigned long clk_div;
-	int ret;
-	HWP_SDMMC_T *hwp_sdmmc = NULL;
+	
 
-	if (!host) {
-		return;
-	}
-
-	hwp_sdmmc = (HWP_SDMMC_T*)host->base;
+	if (!host) return;
 
 	/* Power control */
 	switch (ios->power_mode) {
 		case MMC_POWER_OFF:
 			if (host->mmc_pm != MMC_POWER_OFF && host->id == 0) {
-				ret = regulator_disable(host->host_reg);
+				regulator_disable(host->host_reg);
 				/* Waiting 40ms until power is completely power off. */
 				mdelay(40);
 			}
@@ -999,7 +975,7 @@ static void rda_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 		case MMC_POWER_UP:
 			if (host->mmc_pm == MMC_POWER_OFF && host->id == 0) {
-				ret = regulator_enable(host->host_reg);
+				regulator_enable(host->host_reg);
 			}
 			host->mmc_pm = MMC_POWER_UP;
 			break;
@@ -1037,15 +1013,15 @@ static void rda_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				"set clk = %d, bus_clk = %d, divider = %d\n",
 				(int)host->clock, (int)mclk, (int)clk_div);
 
-			hwp_sdmmc->SDMMC_TRANS_SPEED =
+			((HWP_SDMMC_T*)host->base)->SDMMC_TRANS_SPEED =
 				SDMMC_TRANS_SPEED(clk_div);
-			hwp_sdmmc->SDMMC_MCLK_ADJUST =
+			((HWP_SDMMC_T*)host->base)->SDMMC_MCLK_ADJUST =
 				SDMMC_MCLK_ADJUST(host->mclk_adj);
 			if (host->clk_inv) {
-				hwp_sdmmc->SDMMC_MCLK_ADJUST |= SDMMC_CLK_INV;
+				((HWP_SDMMC_T*)host->base)->SDMMC_MCLK_ADJUST |= SDMMC_CLK_INV;
 			}
 		} else {
-			hwp_sdmmc->SDMMC_MCLK_ADJUST = SDMMC_CLK_DISA;
+			((HWP_SDMMC_T*)host->base)->SDMMC_MCLK_ADJUST = SDMMC_CLK_DISA;
 		}
 	}
 
@@ -1058,43 +1034,39 @@ static void rda_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	dev_info(mmc_dev(host->mmc), "host:(%d)set bus_width to %d pm_mode %d \n", host->id, ios->bus_width, ios->power_mode);
 }
 
-static void rda_mmc_mask_eirq(struct rda_mmc_host *host)
+static inline void rda_mmc_mask_eirq(struct rda_mmc_host *host)
 {
-	struct irq_desc * desc = NULL;
-	desc = irq_to_desc(host->eirq);
-
-	if (!desc->depth) {
-		disable_irq_nosync(host->eirq);
-	}
+	struct irq_desc * desc = irq_to_desc(host->eirq);
+	
+	if (!desc->depth) disable_irq_nosync(host->eirq);
+		
+	
 }
 
-static void rda_mmc_unmask_eirq(struct rda_mmc_host *host)
+static inline void rda_mmc_unmask_eirq(struct rda_mmc_host *host)
 {
-	struct irq_desc * desc = NULL;
-	desc = irq_to_desc(host->eirq);
+	struct irq_desc * desc  = irq_to_desc(host->eirq);
 
-	while (desc->depth) {
-		enable_irq(host->eirq);
-	}
+
+	while (desc->depth) enable_irq(host->eirq);
+		
+	
 }
 static void rda_mmc_enable_sdio_irq(struct mmc_host *mmc, int enable)
 {
 	unsigned long flags;
-	struct rda_mmc_host *host = NULL;
-	HWP_SDMMC_T *hwp_sdmmc = NULL;
-	host = (struct rda_mmc_host *)mmc_priv(mmc);
-
-	hwp_sdmmc = (HWP_SDMMC_T*)host->base;
+	struct rda_mmc_host *host = (struct rda_mmc_host *)mmc_priv(mmc);
+	
 	spin_lock_irqsave(&host->lock, flags);
 
 	if(enable && host->sdio_irq_enable){
 		if(!host->eirq_enable)
-			hwp_sdmmc->SDMMC_INT_MASK |= SDMMC_SDIO_INT_MK;
+			((HWP_SDMMC_T*)host->base)->SDMMC_INT_MASK |= SDMMC_SDIO_INT_MK;
 		else
 			rda_mmc_unmask_eirq(host);
 	} else {
 		if(!host->eirq_enable) {
-			hwp_sdmmc->SDMMC_INT_MASK &= ~SDMMC_SDIO_INT_MK;
+			((HWP_SDMMC_T*)host->base)->SDMMC_INT_MASK &= ~SDMMC_SDIO_INT_MK;
 		}
 		else
 			rda_mmc_mask_eirq(host);
@@ -1110,8 +1082,6 @@ static int rda_mmc_get_cd(struct mmc_host *mmc)
 
 	if (host->detpin_enable)
 	{
-		
-		
 		host->det_pin = gpiod_get(mmc_dev(host->mmc), "detpin", GPIOD_IN);
 		
 		present = !gpiod_get_value(host->det_pin);
@@ -1142,14 +1112,11 @@ static int rda_mmc_get_cd(struct mmc_host *mmc)
 static irqreturn_t rda_mmc_det_irq(int irq, void *data)
 {
 	struct rda_mmc_host *host = data;
-	int present;
+	int present = !gpiod_get_value(host->det_pin);
 
 	/* entering this ISR means that we have configured det_pin:
 	 * we can use its value in board structure */
 	
-	present = !gpiod_get_value(host->det_pin);
-	
-
 	/*
 	 * we expect this irq on both insert and remove,
 	 * and use a short delay to debounce.
@@ -1182,13 +1149,11 @@ static const struct mmc_host_ops rda_mmc_ops = {
 	.enable_sdio_irq = rda_mmc_enable_sdio_irq,
 };
 
-static void rda_sdio_timeout_work(struct work_struct *work)
+static inline void rda_sdio_timeout_work(struct work_struct *work)
 {
 	struct rda_mmc_host *host = container_of(work, struct rda_mmc_host, timeout_work.work);
 
-	if (host) {
-		mmc_signal_sdio_irq(host->mmc);
-	}
+	if (host )mmc_signal_sdio_irq(host->mmc);
 }
 
 
@@ -1197,13 +1162,9 @@ static irqreturn_t rda_sdio_eirq_handler(int irq, void *dev_id)
 {
 	unsigned long flags;
 	struct rda_mmc_host *host = dev_id;
-	struct mmc_host * mmc = NULL;
+	if(!host) return IRQ_HANDLED;
+			
 	u32 int_status = ((HWP_SDMMC_T*)host->base)->SDMMC_INT_STATUS;
-
-	if(host){
-		mmc = host->mmc;
-	}else
-		return IRQ_HANDLED;
 
 	if (!(int_status & SDMMC_SDIO_INT))
 	{
@@ -1211,7 +1172,7 @@ static irqreturn_t rda_sdio_eirq_handler(int irq, void *dev_id)
 		return IRQ_NONE;
 	}
 
-	if(mmc->sdio_irqs) {
+	if(host->mmc->sdio_irqs) {
 		if (host->suspend) {
 			/*
 			 * The handler is invoked as soon as AP is waked up via WiFi,
@@ -1219,10 +1180,10 @@ static irqreturn_t rda_sdio_eirq_handler(int irq, void *dev_id)
 			 * So,we disable interrupt at first, because the interrupt is triggered
 			 * via low-level, then schedule a delayed work to wait for resume callback.
 			 * */
-			rda_mmc_enable_sdio_irq(mmc, 0);
+			rda_mmc_enable_sdio_irq(host->mmc, 0);
 			schedule_delayed_work(&host->timeout_work, msecs_to_jiffies(10));
 		} else {
-			mmc_signal_sdio_irq(mmc);
+			mmc_signal_sdio_irq(host->mmc);
 		}
 	} else {
 		spin_lock_irqsave(&host->lock, flags);
@@ -1233,8 +1194,7 @@ static irqreturn_t rda_sdio_eirq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static ssize_t rda_mmc_unaligned_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t rda_mmc_unaligned_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct rda_mmc_host *host = (struct rda_mmc_host *)mmc_priv(mmc);
