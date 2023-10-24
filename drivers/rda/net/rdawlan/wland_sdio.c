@@ -450,22 +450,21 @@ static int wland_sdio_intr_get(struct wland_sdio_dev *sdiodev, u8 * intrstatus)
 {
 	int ret = 0;
 
-	if (!intrstatus)
-		return -EBADE;
+	if (!intrstatus) return -EBADE;
 
-	if (sdiodev->bus_if->state == WLAND_BUS_DOWN) {
+	if (sdiodev->bus_if->state == WLAND_BUS_DOWN)
+	{
 		/*
 		 * disable interrupt
 		 */
 		*intrstatus = 0;
 		WLAND_ERR("Bus is down!\n");
-	} else {
-		ret = sdioh_request_byte(sdiodev, SDIOH_READ,
-			URSDIO_FUNC1_INT_STATUS, intrstatus);
-	}
+	} 
+	
+	else ret = sdioh_request_byte(sdiodev, SDIOH_READ, URSDIO_FUNC1_INT_STATUS, intrstatus);
+	
 
-	WLAND_DBG(SDIO, TRACE, "Enter(interrupt status: 0x%x)\n",
-		(uint) * intrstatus);
+	//WLAND_DBG(SDIO, TRACE, "Enter(interrupt status: 0x%x)\n", (uint) * intrstatus);
 
 	return ret;
 }
@@ -993,75 +992,72 @@ static uint prio2prec(u32 prio)
 
 static int wland_sdio_bus_txdata(struct device *dev, struct sk_buff *pkt)
 {
-	uint prec;
-	int ret = -EBADE;
+	
 	struct wland_bus *bus_if = dev_get_drvdata(dev);
 	struct wland_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
 	struct wland_sdio *bus = sdiodev->bus;
 	unsigned long flags = 0;
+	uint prec  = prio2prec((pkt->priority & PRIOMASK));
 
-	WLAND_DBG(SDIO, TRACE, "Enter\n");
+	//WLAND_DBG(SDIO, TRACE, "Enter\n");
 
 	/*
 	 * precondition: IS_ALIGNED((unsigned long)(pkt->data), 2)
 	 */
-	prec = prio2prec((pkt->priority & PRIOMASK));
+	
 
 	/*
 	 * Check for existing queue, current flow-control, pending event, or pending clock
 	 */
-	WLAND_DBG(SDIO, TRACE, "deferring pktq len:%d,prec:%d.\n", bus->txq.len,
-		prec);
+	//WLAND_DBG(SDIO, TRACE, "deferring pktq len:%d,prec:%d.\n", bus->txq.len, prec);
 
 	/*
 	 * Priority based enq
 	 */
-	dhd_os_sdlock_txq(bus, &flags);
-	if (!wland_prec_enq(bus->sdiodev->dev, &bus->txq, pkt, prec)) {
-		dhd_os_sdunlock_txq(bus, &flags);
+	if (bus) spin_lock_irqsave(&bus->txqlock, flags);
+	
+	if (!wland_prec_enq(bus->sdiodev->dev, &bus->txq, pkt, prec))
+	{
+		if (bus) spin_unlock_irqrestore(&bus->txqlock, flags);
 		wland_txcomplete(bus->sdiodev->dev, pkt, false);
 		WLAND_ERR("bus->txq is over flow!!!\n");
 		return -ENOSR;
-	} else {
-		ret = 0;
 	}
 
-	if (bus_if->state != WLAND_BUS_DATA) {
+	if (bus_if->state != WLAND_BUS_DATA)
+	{
 		WLAND_ERR("bus has stop\n");
-		dhd_os_sdunlock_txq(bus, &flags);
+		if (bus) spin_unlock_irqrestore(&bus->txqlock, flags);
 		return -1;
 	}
 
-	dhd_os_sdunlock_txq(bus, &flags);
+	if (bus) spin_unlock_irqrestore(&bus->txqlock, flags);
 	WAKE_TX_WORK(bus);
 
-	if (bus->txq.len >= TXHI) {
+	if (bus->txq.len >= TXHI)
+	{
 		bus->txoff = true;
 		wland_txflowcontrol(bus->sdiodev->dev, true);
 	}
 
-	WLAND_DBG(SDIO, TRACE, "TXDATA Wake up DPC work, pktq len:%d\n",
-		bus->txq.len);
-	WLAND_DBG(SDIO, TRACE,
-		"TX Data Wake up TX DPC work,  bus->tx_dpc_tskcnt:%d,  pktq len:%d\n",
-		atomic_read(&bus->tx_dpc_tskcnt), bus->txq.len);
+	//WLAND_DBG(SDIO, TRACE, "TXDATA Wake up DPC work, pktq len:%d\n", bus->txq.len);
+	//WLAND_DBG(SDIO, TRACE, "TX Data Wake up TX DPC work,  bus->tx_dpc_tskcnt:%d,  pktq len:%d\n", atomic_read(&bus->tx_dpc_tskcnt), bus->txq.len);
 
-	return ret;
+	return 0;
 }
 
 static int wland_sdio_bus_txctl(struct device *dev, u8 * msg, uint msglen)
 {
-	int ret = -1;
 	struct wland_bus *bus_if = dev_get_drvdata(dev);
 	struct wland_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
 	struct wland_sdio *bus = sdiodev->bus;
 
-	WLAND_DBG(SDIO, TRACE, "Enter\n");
+	//WLAND_DBG(SDIO, TRACE, "Enter\n");
 
 	/*
 	 * Need to lock here to protect txseq and SDIO tx calls
 	 */
-	dhd_os_sdlock(bus);
+	if (bus->threads_only) down(&bus->sdsem);
 
 	bus->ctrl_frame_stat = true;
 	bus->ctrl_frame_send_success = false;
@@ -1077,45 +1073,42 @@ static int wland_sdio_bus_txctl(struct device *dev, u8 * msg, uint msglen)
 	}
 	WAKE_TX_WORK(bus);
 
-	WLAND_DBG(BUS, TRACE,
-		"TXCTL Wake up TX DPC work,  bus->tx_dpc_tskcnt:%d\n",
-		atomic_read(&bus->tx_dpc_tskcnt));
-	if (bus->ctrl_frame_stat)
-		dhd_os_wait_for_event(bus, &bus->ctrl_frame_stat);
+	//WLAND_DBG(BUS, TRACE, "TXCTL Wake up TX DPC work,  bus->tx_dpc_tskcnt:%d\n", atomic_read(&bus->tx_dpc_tskcnt));
+	if (bus->ctrl_frame_stat) dhd_os_wait_for_event(bus, &bus->ctrl_frame_stat);
 
-	if (!bus->ctrl_frame_stat && bus->ctrl_frame_send_success) {
-		WLAND_DBG(SDIO, DEBUG,
-			"ctrl_frame_stat == false, send success\n");
-		ret = 0;
-	} else if(!bus->ctrl_frame_stat && !bus->ctrl_frame_send_success){
-		WLAND_DBG(SDIO, INFO, "ctrl_frame_stat == true, send failed\n");
-		ret = -1;
-	}
-	if (ret)
-		bus->sdcnt.tx_ctlerrs++;
-	else
+	if (!bus->ctrl_frame_stat && bus->ctrl_frame_send_success)
+	{
+		//WLAND_DBG(SDIO, DEBUG, "ctrl_frame_stat == false, send success\n");
+		
 		bus->sdcnt.tx_ctlpkts++;
-
-	return ret ? -EIO : 0;
+		return  0;
+	} 
+	else if(!bus->ctrl_frame_stat && !bus->ctrl_frame_send_success)
+	{
+		//WLAND_DBG(SDIO, INFO, "ctrl_frame_stat == true, send failed\n");
+		bus->sdcnt.tx_ctlerrs++;
+		return  -EIO;
+	}
+	return 0;
+	
 }
 
 static int wland_sdio_bus_rxctl(struct device *dev, u8 * msg, uint msglen)
 {
-	int timeleft;
+	
 	uint rxlen = 0;
 	bool pending = false;
-	struct wland_bus *bus_if = dev_get_drvdata(dev);
-	struct wland_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
-	struct wland_sdio *bus = sdiodev->bus;
+	struct wland_sdio *bus = (((struct wland_bus*)dev_get_drvdata(dev))->bus_priv.sdio)->bus;
+	int timeleft = dhd_os_ioctl_resp_wait(bus, &bus->rxlen, &pending);
 
-	WLAND_DBG(SDIO, TRACE, "Enter\n");
+	//WLAND_DBG(SDIO, TRACE, "Enter\n");
 
 	/*
 	 * Wait until control frame is available
 	 */
-	timeleft = dhd_os_ioctl_resp_wait(bus, &bus->rxlen, &pending);
 
-	if (bus->rxlen > 0) {
+	if (bus->rxlen > 0)
+	{
 		spin_lock_bh(&bus->rxctl_lock);
 		rxlen = bus->rxlen;
 		memcpy(msg, bus->rxctl, min(msglen, rxlen));
@@ -1123,48 +1116,53 @@ static int wland_sdio_bus_rxctl(struct device *dev, u8 * msg, uint msglen)
 		spin_unlock_bh(&bus->rxctl_lock);
 	}
 
-	if (rxlen) {
-		WLAND_DBG(SDIO, TRACE,
-			"resumed on rxctl frame, got %d expected %d\n", rxlen,
-			msglen);
-	} else if (timeleft == 0) {
-		WLAND_ERR("resumed on timeout\n");
-	} else if (pending) {
-		WLAND_DBG(SDIO, DEBUG, "cancelled\n");
-		return -ERESTARTSYS;
-	} else {
-		WLAND_DBG(SDIO, DEBUG, "resumed for unknown reason\n");
-	}
+	//if (rxlen) WLAND_DBG(SDIO, TRACE, "resumed on rxctl frame, got %d expected %d\n", rxlen, msglen);
+	
+	if (timeleft == 0) WLAND_ERR("resumed on timeout\n");
+	
+	//else if (pending)
+	//{
+	//	WLAND_DBG(SDIO, DEBUG, "cancelled\n");
+	//	return -ERESTARTSYS;
+	//} 
+	
+	//else WLAND_DBG(SDIO, DEBUG, "resumed for unknown reason\n");
+	
+	if (pending) return -ERESTARTSYS;
 
 	if (rxlen)
+	{
 		bus->sdcnt.rx_ctlpkts++;
+		return rxlen;
+	}
 	else
+	{
 		bus->sdcnt.rx_ctlerrs++;
+		return -ETIMEDOUT;
+	}
 
-	return rxlen ? (int) rxlen : -ETIMEDOUT;
+	//return rxlen ? (int) rxlen : -ETIMEDOUT;
+	return rxlen;
 }
 
 static int wland_sdio_bus_init(struct device *dev)
 {
 	struct wland_bus *bus_if = dev_get_drvdata(dev);
-	struct wland_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
-	struct wland_sdio *bus = sdiodev->bus;
-	int ret = 0;
+	struct wland_sdio *bus = (bus_if->bus_priv.sdio)->bus;
+	int ret  = wland_sdio_intr_register(bus->sdiodev);
 
-	WLAND_DBG(BUS, TRACE, "Enter\n");
+	//WLAND_DBG(BUS, TRACE, "Enter\n");
 
 	/*
 	 * Start the watchdog timer
 	 */
 	bus->sdcnt.tickcnt = 0;
 
-	ret = wland_sdio_intr_register(bus->sdiodev);
-	if (ret != 0)
-		WLAND_ERR("intr register failed:%d\n", ret);
+	if (ret != 0) WLAND_ERR("intr register failed:%d\n", ret);
 
 	bus_if->state = WLAND_BUS_DATA;
 
-	WLAND_DBG(BUS, TRACE, "Done\n");
+	//WLAND_DBG(BUS, TRACE, "Done\n");
 	return ret;
 }
 
@@ -1346,10 +1344,8 @@ static void wland_bus_watchdog(struct timer_list *tList)
 static void wland_sdioh_irqhandler(struct sdio_func *func)
 {
 	struct wland_bus *bus_if = dev_get_drvdata(&func->dev);
-	struct wland_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
-	struct wland_sdio *bus = sdiodev->bus;
+	struct wland_sdio *bus = ((struct wland_sdio_dev*)bus_if->bus_priv.sdio)->bus;
 	u8 intstatus = 0;
-	uint prec;
 	struct sk_buff *pkt = NULL;
 	unsigned long flags = 0;
 
@@ -1383,44 +1379,46 @@ static void wland_sdioh_irqhandler(struct sdio_func *func)
 
 	atomic_set(&bus->intstatus, intstatus);
 
-	WLAND_DBG(BUS, TRACE, "sdio_intstatus:%x\n", intstatus);
+	//WLAND_DBG(BUS, TRACE, "sdio_intstatus:%x\n", intstatus);
 
 	/*
 	 * On frame indication, read available frames
 	 */
-	if (intstatus & I_AHB2SDIO) {
+	if (intstatus & I_AHB2SDIO) 
+	{
 		pkt = wland_sdio_readframes(bus);
-	} else if (intstatus & I_ERROR) {
+	} 
+	else if (intstatus & I_ERROR)
+	{
 		u8 val = I_ERROR;
 
-		sdioh_request_byte(bus->sdiodev, SDIOH_WRITE,
-			URSDIO_FUNC1_INT_PENDING, &val);
+		sdioh_request_byte(bus->sdiodev, SDIOH_WRITE, URSDIO_FUNC1_INT_PENDING, &val);
 		WLAND_ERR("int_error!\n");
-	} else {
-		WLAND_DBG(BUS, DEBUG,
-			"No Interrupt(bus->clkstate:%d,bus->ctrl_frame_stat:%d).\n",
-			bus->clkstate, bus->ctrl_frame_stat);
-	}
+	} 
+	
+	//else  WLAND_DBG(BUS, DEBUG, "No Interrupt(bus->clkstate:%d,bus->ctrl_frame_stat:%d).\n", bus->clkstate, bus->ctrl_frame_stat);
+	
 
-	if (pkt) {
-		prec = prio2prec((pkt->priority & PRIOMASK));
-		dhd_os_sdlock_rxq(bus, &flags);
-		if(!wland_prec_enq(bus->sdiodev->dev, &bus->rxq, pkt, prec)){
-			dhd_os_sdunlock_rxq(bus, &flags);
+	if (pkt)
+	{
+		uint prec = prio2prec((pkt->priority & PRIOMASK));
+		if (bus) spin_lock_irqsave(&bus->rxqlock, flags);
+		
+		if(!wland_prec_enq(bus->sdiodev->dev, &bus->rxq, pkt, prec))
+		{
+			if (bus) spin_unlock_irqrestore(&bus->rxqlock, flags);
 			WLAND_ERR("bus->rxq is over flow!!!\n");
 			wland_pkt_buf_free_skb(pkt);
 			return;
 		}
-		dhd_os_sdunlock_rxq(bus, &flags);
-		WLAND_DBG(BUS, TRACE,
-				"IRQ Wake up RX Work, bus->rx_dpc_tskcnt=%d\n",
-				atomic_read(&bus->rx_dpc_tskcnt));
-		WLAND_DBG(BUS, TRACE,"rxq_len=%d\n", wland_pktq_mlen(&bus->rxq, ~bus->flowcontrol));
+		
+		if (bus) spin_unlock_irqrestore(&bus->rxqlock, flags);
+		
+		//WLAND_DBG(BUS, TRACE, "IRQ Wake up RX Work, bus->rx_dpc_tskcnt=%d\n", atomic_read(&bus->rx_dpc_tskcnt));
+		//WLAND_DBG(BUS, TRACE,"rxq_len=%d\n", wland_pktq_mlen(&bus->rxq, ~bus->flowcontrol));
 		WAKE_RX_WORK(bus);
 	}
-	WLAND_DBG(SDIO, TRACE,
-		"IRQ schedule work,  bus->rx_dpc_tskcnt:%d, Done\n",
-		atomic_read(&bus->rx_dpc_tskcnt));
+	//WLAND_DBG(SDIO, TRACE, "IRQ schedule work,  bus->rx_dpc_tskcnt:%d, Done\n", atomic_read(&bus->rx_dpc_tskcnt));
 }
 
 int wland_sdio_intr_register(struct wland_sdio_dev *sdiodev)
@@ -1432,7 +1430,7 @@ int wland_sdio_intr_register(struct wland_sdio_dev *sdiodev)
 	ret = wland_sdio_intr_set(sdiodev, true);
 	sdio_release_host(sdiodev->func);
 
-	WLAND_DBG(SDIO, TRACE, "Enter(ret:%d)\n", ret);
+	//WLAND_DBG(SDIO, TRACE, "Enter(ret:%d)\n", ret);
 
 	return ret;
 }

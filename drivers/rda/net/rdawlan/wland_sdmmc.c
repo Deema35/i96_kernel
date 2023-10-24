@@ -80,8 +80,7 @@ bool wland_pm_resume_error(struct wland_sdio_dev *sdiodev)
 	return is_err;
 }
 
-void wland_pm_resume_wait(struct wland_sdio_dev *sdiodev,
-	wait_queue_head_t * wq)
+void wland_pm_resume_wait(struct wland_sdio_dev *sdiodev, wait_queue_head_t * wq)
 {
 #if 0
 #ifdef CONFIG_PM_SLEEP
@@ -93,28 +92,22 @@ void wland_pm_resume_wait(struct wland_sdio_dev *sdiodev,
 #endif
 }
 
-int sdioh_request_byte(struct wland_sdio_dev *sdiodev, uint rw, uint regaddr,
-	u8 * byte)
+int sdioh_request_byte(struct wland_sdio_dev *sdiodev, uint rw, uint regaddr, u8 * byte)
 {
 	int err_ret;
 
-	WLAND_DBG(SDIO, TRACE, "rw=%d,addr=0x%05x\n", rw, regaddr);
+	//WLAND_DBG(SDIO, TRACE, "rw=%d,addr=0x%05x\n", rw, regaddr);
 
-	wland_pm_resume_wait(sdiodev, &sdiodev->request_byte_wait);
+	//wland_pm_resume_wait(sdiodev, &sdiodev->request_byte_wait);
 
-	if (wland_pm_resume_error(sdiodev))
-		return -EIO;
+	//if (wland_pm_resume_error(sdiodev)) return -EIO;
 
 	//sdio_claim_host(sdiodev->func);
-	if (SDIOH_WRITE == rw)	/* CMD52 Write */
-		sdio_writeb(sdiodev->func, *byte, regaddr, &err_ret);
-	else
-		*byte = sdio_readb(sdiodev->func, regaddr, &err_ret);
+	if (SDIOH_WRITE == rw)	 sdio_writeb(sdiodev->func, *byte, regaddr, &err_ret);
+	else *byte = sdio_readb(sdiodev->func, regaddr, &err_ret);
 	//sdio_release_host(sdiodev->func);
 
-	if (err_ret)
-		WLAND_ERR("Failed to %s :@0x%05x=%02x,Err: %d.\n",
-			rw ? "write" : "read", regaddr, *byte, err_ret);
+	if (err_ret) WLAND_ERR("Failed to %s :@0x%05x=%02x,Err: %d.\n", rw ? "write" : "read", regaddr, *byte, err_ret);
 
 	return err_ret;
 }
@@ -810,44 +803,37 @@ void wland_sdio_exit(void)
 //                                                                              //
 //////////////////////////////////////////////////////////////////////////////////
 
-void dhd_os_sdlock(struct wland_sdio *bus)
+void inline dhd_os_sdlock(struct wland_sdio *bus)
 {
-	if (bus->threads_only)
-		down(&bus->sdsem);
+	if (bus->threads_only) down(&bus->sdsem);
 }
 
-void dhd_os_sdunlock(struct wland_sdio *bus)
+void inline dhd_os_sdunlock(struct wland_sdio *bus)
 {
-	if (bus->threads_only)
-		up(&bus->sdsem);
+	if (bus->threads_only) up(&bus->sdsem);
 }
 
-void dhd_os_sdlock_txq(struct wland_sdio *bus, unsigned long *flags)
+void inline dhd_os_sdlock_txq(struct wland_sdio *bus, unsigned long *flags)
 {
-	if (bus)
-		spin_lock_irqsave(&bus->txqlock, *flags);
+	if (bus) spin_lock_irqsave(&bus->txqlock, *flags);
 }
 
-void dhd_os_sdunlock_txq(struct wland_sdio *bus, unsigned long *flags)
+void inline dhd_os_sdunlock_txq(struct wland_sdio *bus, unsigned long *flags)
 {
-	if (bus)
-		spin_unlock_irqrestore(&bus->txqlock, *flags);
+	if (bus) spin_unlock_irqrestore(&bus->txqlock, *flags);
 }
 
-void dhd_os_sdlock_rxq(struct wland_sdio *bus, unsigned long *flags)
+void inline dhd_os_sdlock_rxq(struct wland_sdio *bus, unsigned long *flags)
 {
-	if (bus)
-		spin_lock_irqsave(&bus->rxqlock, *flags);
+	if (bus) spin_lock_irqsave(&bus->rxqlock, *flags);
 }
 
-void dhd_os_sdunlock_rxq(struct wland_sdio *bus, unsigned long *flags)
+void inline dhd_os_sdunlock_rxq(struct wland_sdio *bus, unsigned long *flags)
 {
-	if (bus)
-		spin_unlock_irqrestore(&bus->rxqlock, *flags);
+	if (bus) spin_unlock_irqrestore(&bus->rxqlock, *flags);
 }
 
-int dhd_os_ioctl_resp_wait(struct wland_sdio *bus, uint * condition,
-	bool * pending)
+int dhd_os_ioctl_resp_wait(struct wland_sdio *bus, uint * condition, bool * pending)
 {
 	DECLARE_WAITQUEUE(wait, current);
 

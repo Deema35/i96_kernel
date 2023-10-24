@@ -281,39 +281,33 @@ void wland_rx_frames(struct device *dev, struct sk_buff *skb)
 
 void wland_txcomplete(struct device *dev, struct sk_buff *txp, bool success)
 {
-	struct wland_bus *bus_if = dev_get_drvdata(dev);
-	struct wland_private *drvr = bus_if->drvr;
-	struct wland_if *ifp;
-	struct ethhdr *eh;
+	struct wland_private *drvr = ((struct wland_bus *)dev_get_drvdata(dev))->drvr;
 	s32 ifidx = 0;
-	u16 type;
-	int res;
+	int res = wland_proto_hdrpull(drvr, &ifidx, txp);
+	struct wland_if *ifp = drvr->iflist[ifidx];
+	u16 type = ntohs(((struct ethhdr *)(txp->data))->h_proto);
+	
 
-	WLAND_DBG(BUS, TRACE, "Enter,success:%d\n", success);
+	//WLAND_DBG(BUS, TRACE, "Enter,success:%d\n", success);
 
-	res = wland_proto_hdrpull(drvr, &ifidx, txp);
-	ifp = drvr->iflist[ifidx];
-	if (!ifp)
-		goto done;
+	if (!ifp) goto done;
 
-	if (res == 0) {
-		eh = (struct ethhdr *) (txp->data);
-		type = ntohs(eh->h_proto);
+	if (res == 0)
+	{
 
-		WLAND_DBG(BUS, TRACE, "type:%d\n", type);
+		//WLAND_DBG(BUS, TRACE, "type:%d\n", type);
 
-		if (type == ETH_P_PAE) {
+		if (type == ETH_P_PAE)
+		{
 			atomic_dec(&ifp->pend_8021x_cnt);
-			if (waitqueue_active(&ifp->pend_8021x_wait))
-				wake_up(&ifp->pend_8021x_wait);
+			if (waitqueue_active(&ifp->pend_8021x_wait)) wake_up(&ifp->pend_8021x_wait);
 		}
 	}
-	if (!success)
-		ifp->stats.tx_errors++;
+	if (!success) ifp->stats.tx_errors++;
 done:
 	wland_pkt_buf_free_skb(txp);
 
-	WLAND_DBG(BUS, TRACE, "Done\n");
+	//WLAND_DBG(BUS, TRACE, "Done\n");
 }
 
 int wland_bus_active(struct device *dev)
