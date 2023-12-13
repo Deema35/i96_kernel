@@ -218,26 +218,23 @@ int rda_i2c_send_bytes(struct rda_i2c_dev *dev,u8 addr, u8 *data, int len,bool s
 	//timerout = jiffies;
 	if (len < 1)
 		return -1;
-	//rda_dbg_i2c("%s, addr =0x%x , len =%d ,stop =%d\n", __func__, addr, len, stop);
+	//dev_info(dev->dev, "%s, addr =0x%x , len =%d ,stop =%d\n", __func__, addr, len, stop);
 	ret = hal_i2c_raw_send_byte(dev,(addr << 1) & 0xFE, 1, 0);
 	if (ret) {
-		//dev_err(dev->dev, "%s, send addr fail, addr = 0x%02x\n",
-		//	__func__, addr);
+		//dev_err(dev->dev, "%s, send addr fail, addr = 0x%02x\n", 	__func__, addr);
 		return ret;
 	}
 
 	for (i=0;i<len-1;i++) {
 		ret = hal_i2c_raw_send_byte(dev, data[i], 0, 0);
 		if (ret) {
-			//dev_err(dev->dev, "%s, send data[%d] = 0x%02x fail\n",
-			//	__func__, i, data[i]);
+			//dev_err(dev->dev, "%s, send data[%d] = 0x%02x fail\n", __func__, i, data[i]);
 			return ret;
 		}
 	}
 	ret = hal_i2c_raw_send_byte(dev, data[len-1], 0,stop);
 	if (ret) {
-		//dev_err(dev->dev, "%s, send last data 0x%02x fail\n",
-		//	__func__, data[len-1]);
+		dev_err(dev->dev, "%s, send last data 0x%02x fail\n", 	__func__, data[len-1]);
 		return ret;
 	}
 	//msessc = jiffies_to_msecs(jiffies-timerout);
@@ -299,8 +296,7 @@ static int rda_i2c_xfer_msg(struct i2c_adapter *adap,
 	return ret;
 }
 
-static int
-rda_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+static int rda_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
 	struct rda_i2c_dev *dev = i2c_get_adapdata(adap);
 	int i;
@@ -308,6 +304,8 @@ rda_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	//unsigned long timerout;
 	//u32 msessc;
 	//timerout = jiffies;
+	
+	//dev_info(dev->dev, "rda_i2c_xfer num = %d \n",num);
 	for (i = 0; i < num; i++) {
 		r = rda_i2c_xfer_msg(adap, &msgs[i], (i == (num - 1)));
 		if (r != 0)
@@ -380,20 +378,19 @@ static int rda_i2c_probe(struct platform_device *pdev)
 	pdev->id = GetDeviceTreeProperty(pdev, "id");
 
 	dev->i2c_regulator = regulator_get(&pdev->dev, LDO_I2C);
-
-        if (IS_ERR(dev->i2c_regulator))
-			{
-                dev_err(&pdev->dev,  "Failed to get camera regulator\n");
-                goto err_free_mem;
-        }
-        r = regulator_enable(dev->i2c_regulator);
-        if (r < 0) {
-                dev_err(&pdev->dev, "Failed to enable camera regulator\n");
-                goto err_regulator;
-        }
-
 	
-	
+
+    if (IS_ERR(dev->i2c_regulator))
+	{
+        dev_err(&pdev->dev,  "Failed to get camera regulator\n");
+        goto err_free_mem;
+    }
+    r = regulator_enable(dev->i2c_regulator);
+	if (r < 0) {
+        dev_err(&pdev->dev, "Failed to enable camera regulator\n");
+        goto err_regulator;
+    }
+
 
 	dev->speed_khz = GetDeviceTreeProperty(pdev, "clock-frequency")/1000;
 	dev->idle = 1;

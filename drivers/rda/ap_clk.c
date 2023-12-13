@@ -206,6 +206,8 @@ void apsys_notify_exception(void)
 #ifndef CONFIG_RDA_FPGA
 static int __apsys_request_low_power(unsigned long flag)
 {
+	
+	
 #if 0
 	/*
 	 * FOR OFF MODE testing
@@ -217,7 +219,8 @@ static int __apsys_request_low_power(unsigned long flag)
 #else
 	u32 reg;
 	reg = ioread32(&hwp_apIrq->Cause);
-	if (reg == 0) {
+	if (reg == 0)
+	{
 		unsigned long old_rate, min;
 		int need_adjust = 0;
 		/* Lock interrupts.
@@ -225,7 +228,8 @@ static int __apsys_request_low_power(unsigned long flag)
 		 */
 		ioread32(&hwp_apIrq->SC);
 		rda_md_plls_shutdown(flag);
-
+		
+		
 		old_rate = apsys_get_cpu_clk_rate();
 		min = rda_get_cpufreq_min();
 		if (min != old_rate)
@@ -238,21 +242,17 @@ static int __apsys_request_low_power(unsigned long flag)
 		/* Request to sleep */
 		reg = COMREGS_IRQ0_SET(COMREGS_SLEEP_CTRL);
 		iowrite32(reg, &hwp_apComregs->ItReg_Set);
-
 		/* CPU WFI HERE */
-		asm volatile("dsb \n wfi" : : : "memory");
-
+		//asm volatile("dsb \n wfi" : : : "memory");
 		// Modem should have finished processing the request
 #ifndef CONFIG_MACH_RDA8810E
 		//something wrong with 8810E modem image
-		BUG_ON((ioread32(&hwp_apComregs->ItReg_Clr) &
-				COMREGS_IRQ0_CLR(COMREGS_SLEEP_CTRL)) == 0);
+		BUG_ON((ioread32(&hwp_apComregs->ItReg_Clr) & COMREGS_IRQ0_CLR(COMREGS_SLEEP_CTRL)) == 0);
 #endif
 		// Tell modem that AP knows it can start to run
 		reg = COMREGS_IRQ0_CLR(COMREGS_SLEEP_CTRL);
 		iowrite32(reg, &hwp_apComregs->ItReg_Clr);
-		if (need_adjust)
-			apsys_adjust_cpu_clk_rate(old_rate);
+		if (need_adjust) apsys_adjust_cpu_clk_rate(old_rate);
 	}
 #endif
 	return 0;
@@ -271,7 +271,6 @@ int apsys_request_sleep(unsigned long arg)
 int apsys_request_lp2(unsigned long arg)
 {
 	unsigned long flag;
-
 	flag = AP_DDR_PLL | AP_CPU_PLL;
 	return __apsys_request_low_power(flag);
 }

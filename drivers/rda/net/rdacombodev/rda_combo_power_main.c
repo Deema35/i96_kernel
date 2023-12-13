@@ -911,6 +911,8 @@ static int rda_combo_power_ctrl_probe(struct platform_device *pdev)
 		ret = PTR_ERR(combo_reg);
 		goto fail;
 	}
+	
+
 
 	{
 		unsigned char *temp = NULL;

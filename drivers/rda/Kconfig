@@ -9,7 +9,14 @@ menuconfig RDA_SUPPORT
 	help
 		This selects support various RDA devices
 		
-	  
+config MACH_RDA8810
+	depends on RDA_SUPPORT
+	depends on ARCH_RDA
+	bool "RDA8810 based mach"
+	default y
+	help
+	  RDA8810 based Board
+
 config MMC_RDA
 	depends on RDA_SUPPORT
 	depends on ARCH_RDA
@@ -27,7 +34,13 @@ config CLK_RDA
 	help
 	  RDA clock tree
 	  
-
-	  
-	  
 source "drivers/rda/net/Kconfig"
+
+config VIDEO_RDA
+	tristate "RDA Camera Interface driver"
+	depends on RDA_SUPPORT
+	depends on ARCH_RDA
+	depends on VIDEO_DEV 
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  This is a v4l2 driver for the RDA Camera Interface

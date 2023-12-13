@@ -12,7 +12,7 @@ static int rda_bt_core_detect(struct i2c_client *client, struct i2c_board_info *
 	return 0;
 }
 
-void rda_combo_set_wake_lock(void);
+//void rda_combo_set_wake_lock(void);
 
 #ifdef CONFIG_BLUEZ_SUPPORT
 extern void hci_bt_wakeup_host(void);

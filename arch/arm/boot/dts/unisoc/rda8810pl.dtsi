@@ -76,10 +76,11 @@
 		};
 		
 
-	
-
-	reg_rda_ldo_cam {
+	ldo_cam:reg_rda_ldo_cam {
 		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
 		
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <2800000>;
@@ -90,13 +91,32 @@
 		valid_modes_mask = <(0x2 | 0x8)>;
 		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
 		suply_consumer_name = "v_cam";
-		def_val = <2800000>;
+		def_val = <1800000>;
 		};
 		
-	
-
-	vreg_1:reg_rda_ldo_sdmmc {
+	ldo_usb:reg_rda_ldo_usb {
 		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+		
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <1>;
+		pm_id = <6>; 
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
+		suply_consumer_name = "v_usb";
+		def_val = <1800000>;
+		};
+		
+	ldo_sdmmc:reg_rda_ldo_sdmmc {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
 
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <2800000>;
@@ -109,10 +129,85 @@
 		suply_consumer_name = "v_sdmmc";
 		def_val = <2800000>;
 		};
-
-	
-	vreg_2:reg_rda_ldo_i2c {
+		
+	ldo_fm:reg_rda_ldo_fm {
 		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+		
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <3>;
+		pm_id = <8>; //8
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
+		suply_consumer_name = "v_fm";
+		def_val = <1800000>;
+		};
+		
+	ldo_v_bt:reg_rda_ldo_v_bt {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <4>;
+		pm_id = <10>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
+		suply_consumer_name = "v_bt";
+		def_val = <1800000>;
+		};
+		
+	ldo_lcd:reg_rda_ldo_lcd {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+		
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <5>;
+		pm_id = <12>;//12
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
+		suply_consumer_name = "v_lcd";
+		def_val = <1800000>;
+		};
+		
+	ldo_cam_flash:reg_rda_ldo_cam_flash {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+		
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <6>;
+		pm_id = <11>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
+		suply_consumer_name = "v_camflash";
+		def_val = <1800000>;
+		};
+		
+	
+	ldo_i2c:reg_rda_ldo_i2c {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
 
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <2800000>;
@@ -126,24 +221,133 @@
 		def_val = <2800000>;
 		};
 		
-	vreg_3:reg_rda_ldo_v_bt {
+	ldo_keypad:reg_rda_ldo_keypad {
 		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
 
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <2800000>;
-		regulator-type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
-		id = <5>;
-		pm_id = <10>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <8>;
+		pm_id = <3>;
 		msys_cmd = <SYS_PM_CMD_EN>;
 		valid_modes_mask = <(0x2 | 0x8)>;
-		valid_ops_mask = <(0x8 | 0x1 | 0x4)>;
-		suply_consumer_name = "v_bt";
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_keypad";
+		def_val = <1800000>;
+		};
+		
+	ldo_backlight:reg_rda_ldo_backlight {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <1>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <9>;
+		pm_id = <2>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_backlight";
+		def_val = <1800000>;
+		};
+		
+	ldo_ledr:reg_rda_ldo_ledr {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <10>;
+		pm_id = <4>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_ledr";
+		def_val = <1800000>;
+		};
+		
+	ldo_ledg:reg_rda_ldo_ledg {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <11>;
+		pm_id = <5>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_ledg";
+		def_val = <1800000>;
+		};
+		
+	ldo_ledb:reg_rda_ldo_ledb {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <12>;
+		pm_id = <0>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_ledb";
+		def_val = <1800000>;
+		};
+		
+	ldo_vibrator:reg_rda_ldo_vibrator {
+		compatible = "rda,8810pl-regulator";
+		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <13>;
+		pm_id = <9>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_vibrator";
 		def_val = <1800000>;
 		};
 	
-	
-	
+ldo_lcd2v8:reg_rda_ldo_lcd2v8 {
+		compatible = "rda,8810pl-regulator";
 		
+		vtable = <1800000>,
+				<2800000>;
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator_type = <0>; // 0 - REGULATOR_VOLTAGE, 1 - REGULATOR_CURRENT;
+		id = <14>;
+		pm_id = <14>;
+		msys_cmd = <SYS_PM_CMD_EN>;
+		valid_modes_mask = <(0x2 | 0x8)>;
+		valid_ops_mask = <( 0x1 | 0x4)>;
+		suply_consumer_name = "v_lcd2v8";
+		def_val = <1800000>;
+		};
+		
+
 
 	apb@20800000 {
 		compatible = "simple-bus";
@@ -222,7 +426,7 @@
 		i2c0: i2c@50000 {
 			compatible = "rda,8810pl-i2c";
 			reg = <0x50000 0x1000>;
-			vmmc-supply = <&vreg_2>;
+			vmmc-supply = <&ldo_i2c>;
 			clocks = <&sysclk CLK_RDA_APB1>;
 			clock-frequency = <100000>; //100000 orig
 			
@@ -255,29 +459,64 @@
 					status = "okay";
 				};
 				
+				gc2035: camera@3c {
+					compatible = "op,gc2035";
+					reg = <0x3c>;
+					resetb-gpios = <&gpiob 10 GPIO_ACTIVE_HIGH>;
+					pwdn-gpios = <&gpiob 11 GPIO_ACTIVE_LOW>;
+					//clocks = <&sysclk CLK_RDA_CAMERA>;
+					vmmc-supply = <&ldo_cam>;
+
+					port {
+						gc2035_0: endpoint {
+							remote-endpoint = <&cam_csi_0>;
+							bus-width = <8>;
+						};
+					};
+				};
+				
 			
 		};
 		
 		i2c1: i2c@60000 {
 			compatible = "rda,8810pl-i2c";
 			reg = <0x60000 0x1000>;
-			vmmc-supply = <&vreg_2>;
+			vmmc-supply = <&ldo_i2c>;
 			clocks = <&sysclk CLK_RDA_APB1>;
 			clock-frequency = <400000>;
-			
 			id = <1>;
+			
+			#address-cells = <0x1>;
+			#size-cells = <0>;
+			
+			
 		};
 		
 		i2c2: i2c@70000 {
 			compatible = "rda,8810pl-i2c";
 			reg = <0x70000 0x1000>;
-			vmmc-supply = <&vreg_2>;
+			vmmc-supply = <&ldo_i2c>;
 			clocks = <&sysclk CLK_RDA_APB1>;
 			clock-frequency = <200000>;
 			
 			id = <2>;
 		};
 	};
+	
+	cam_csi: csi@20000000 {
+				compatible = "rda,8810pl-csi";
+				reg = <0x20000000 0x40000>;
+				interrupts = <23 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&sysclk CLK_RDA_CAMERA>;
+				port {
+					cam_csi_0: endpoint {
+							remote-endpoint = <&gc2035_0>;
+							bus-width = <8>;
+							vsync-active = <1>;
+							hsync-active = <1>;
+					};
+				};
+			};
 
 	apb@20a00000 {
 		compatible = "simple-bus";
@@ -290,7 +529,7 @@
 			reg = <0x50000 0x1000>;
 			interrupts = <3 IRQ_TYPE_LEVEL_HIGH>;
 			detpin-gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;
-			vmmc-supply = <&vreg_1>;
+			vmmc-supply = <&ldo_sdmmc>;
 			clocks = <&sysclk CLK_RDA_APB2>;
 			
 			mmc_id = <0>;
@@ -320,22 +559,22 @@
 			
 			status = "disabled";
 		};
-//		mmc2: mmc@70000 {
-//			compatible = "rda,8810pl-mmc";
-//			reg = <0x70000 0x1000>;
-//			interrupts = <5 IRQ_TYPE_LEVEL_HIGH>;
-//			clocks = <&sysclk CLK_RDA_APB2>;
+		mmc2: mmc@70000 {
+			compatible = "rda,8810pl-mmc";
+			reg = <0x70000 0x1000>;
+			interrupts = <5 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&sysclk CLK_RDA_APB2>;
 			
-//			mmc_id = <2>;
-//			max-frequency = <30000000>;
-//			caps = <((1 << 6) | (1 << 8))>;
-//			pm_caps = <0>;
-//			sys_suspend = <0>;
-//			clk_inv = <0>;
-//			mclk_adj = <0>;
+			mmc_id = <2>;
+			max-frequency = <30000000>;
+			caps = <((1 << 6) | (1 << 8))>;
+			pm_caps = <0>;
+			sys_suspend = <0>;
+			clk_inv = <0>;
+			mclk_adj = <0>;
 			
-//			status = "disabled";
-//		};
+			status = "disabled";
+		};
 
 		uart1: serial@0 {
 			compatible = "rda,8810pl-uart";
@@ -367,7 +606,7 @@
 		clocks = <&sysclk CLK_RDA_AUX_CLK>, <&sysclk CLK_RDA_CLK_OUT>;
 		clock-names = "rda_aux", "rda_out";
 		wakepin-gpios = <&gpiob 1 GPIO_ACTIVE_HIGH>;
-		vbt-supply = <&vreg_3>;
+		vbt-supply = <&ldo_v_bt>;
 	};
 	
 	cpu-freg

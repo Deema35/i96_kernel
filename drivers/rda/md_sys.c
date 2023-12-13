@@ -173,6 +173,7 @@ static inline void rda_msys_mesg_init(struct msys_message *mesg)
 #ifndef CONFIG_RDA_FPGA
 static unsigned int rda_msys_sync_write_timeout(struct msys_message *mesg, int timeout)
 {
+
 	DECLARE_COMPLETION_ONSTACK(done);
 	int ret;
 	unsigned int status = 0;

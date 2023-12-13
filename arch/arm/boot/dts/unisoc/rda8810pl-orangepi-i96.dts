@@ -63,7 +63,7 @@
 	status = "okay";
 };
 
-//&mmc2 {
-//	max-frequency = <30000000>;
-//	status = "okay";
-//};
+&mmc2 {
+	max-frequency = <30000000>;
+	status = "disabled";
+};

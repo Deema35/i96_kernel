@@ -48,13 +48,3 @@
 	status = "okay";
 	clocks = <&uart_clk>;
 };
-
-&mmc0 {
-	max-frequency = <30000000>;
-	status = "okay";
-};
-
-&mmc1 {
-	max-frequency = <20000000>;
-	status = "okay";
-};
