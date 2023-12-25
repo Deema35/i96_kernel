@@ -39,4 +39,5 @@ sudo mount -o loop,offset=2097152 NewImg.img /tmp/tmp (for modify boot partition
 sudo mount -o loop,offset=54525952 NewImg.img /tmp/tmp (for modify root system partition)
 ```
 
-[Habrahabr.ru](https://habr.com/ru/articles/763996/)
+[Сборка прошивки из исходников для Orange PI i96(Orange PI 2g-iot)](https://habr.com/ru/articles/763996/)
+[Структура драйвера Linux для одноплатного компьютера](https://habr.com/ru/articles/782858/)
