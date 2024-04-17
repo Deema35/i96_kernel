@@ -41,4 +41,4 @@ sudo mount -o loop,offset=54525952 NewImg.img /tmp/tmp (for modify root system p
 
 [Сборка прошивки из исходников для Orange PI i96(Orange PI 2g-iot)](https://habr.com/ru/articles/763996/) / [Building firmware for Orange PI i96 (Orange PI 2g-iot) from scratch](https://habr.com/ru/articles/804233/)
 
-[Структура драйвера Linux для одноплатного компьютера](https://habr.com/ru/articles/782858/)
+[Структура драйвера Linux для одноплатного компьютера](https://habr.com/ru/articles/782858/) / [Structure of Linux driver for single-board computer.](https://habr.com/ru/articles/808425/)
