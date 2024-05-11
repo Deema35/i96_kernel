@@ -16,8 +16,8 @@
 # CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ccflags-y += \
-	-Idrivers/rda/net/rdawlan\
-	-Idrivers/rda/net/include
+        -I $(srctree)/drivers/rda/net/rdawlan \
+        -I $(srctree)/drivers/rda/net/include
 
 ccflags-y += -D__CHECK_ENDIAN__
 
